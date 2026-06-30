@@ -13,6 +13,10 @@ const state = {
   activeAgentStage: null,
   agentWorkLog: [],
   agentWorkTimer: null,
+  voiceMode: false,
+  voiceMuted: false,
+  voiceSpeaking: false,
+  voiceStreamBuffer: '',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -273,10 +277,91 @@ async function typeHermesMessage(item, content, adapterMode = '') {
   const chunkSize = text.length > 900 ? 18 : 9;
   for (let index = 0; index < text.length; index += chunkSize) {
     target.textContent = text.slice(0, index + chunkSize);
+    if (state.voiceMode) handleVoiceDelta(text.slice(index, index + chunkSize));
     $('chatLog').scrollTop = $('chatLog').scrollHeight;
     await wait(14);
   }
+  flushVoiceBuffer();
   item.querySelector('.message-body').innerHTML = formatHermesContent(text);
+}
+
+function setVoiceBubble(title, detail, tone = 'idle') {
+  const bubble = $('voiceBubble');
+  if (!bubble) return;
+  bubble.hidden = !state.voiceMode;
+  bubble.dataset.voiceState = tone;
+  $('voiceBubbleTitle').textContent = title;
+  $('voiceBubbleText').textContent = detail;
+  $('voiceStatus').textContent = detail;
+}
+
+function updateVoiceControls() {
+  $('voiceModeBtn').hidden = state.voiceMode;
+  $('muteVoiceBtn').hidden = !state.voiceMode;
+  $('stopVoiceBtn').hidden = !state.voiceMode;
+  $('muteVoiceBtn').textContent = state.voiceMuted ? 'Unmute' : 'Mute';
+  $('chatInput').placeholder = state.voiceMode ? 'Voice mode active — type here anytime as fallback' : 'What is happening?';
+  if (!state.voiceMode) $('voiceBubble').hidden = true;
+}
+
+function speakLiveChunk(text, { interrupt = false } = {}) {
+  const chunk = String(text || '').trim();
+  if (!chunk || !state.voiceMode || state.voiceMuted || !('speechSynthesis' in window)) return;
+  if (interrupt) window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(chunk);
+  utterance.rate = 0.96;
+  utterance.pitch = 1.0;
+  utterance.onstart = () => { state.voiceSpeaking = true; setVoiceBubble('Hermes is talking', chunk, 'speaking'); };
+  utterance.onend = () => { state.voiceSpeaking = false; if (state.voiceMode) setVoiceBubble('Voice mode listening', 'Ask another question, mute, or stop conversation to return to text.', 'listening'); };
+  window.speechSynthesis.speak(utterance);
+}
+
+function handleVoiceDelta(delta) {
+  if (!state.voiceMode || state.voiceMuted) return;
+  state.voiceStreamBuffer += delta;
+  setVoiceBubble('Hermes is writing and talking', 'Streaming response live. Speech starts on sentence chunks, not after the full answer.', 'speaking');
+  const match = state.voiceStreamBuffer.match(/^([\s\S]*?[.!?])\s+/);
+  if (!match) return;
+  const sentence = match[1];
+  state.voiceStreamBuffer = state.voiceStreamBuffer.slice(match[0].length);
+  speakLiveChunk(sentence);
+}
+
+function flushVoiceBuffer() {
+  if (!state.voiceMode || state.voiceMuted) { state.voiceStreamBuffer = ''; return; }
+  const remaining = state.voiceStreamBuffer.trim();
+  state.voiceStreamBuffer = '';
+  if (remaining) speakLiveChunk(remaining);
+}
+
+function startVoiceConversation() {
+  state.voiceMode = true;
+  state.voiceMuted = false;
+  state.voiceStreamBuffer = '';
+  updateVoiceControls();
+  if (!state.recognition) {
+    setVoiceBubble('Voice input unavailable', 'This browser has no SpeechRecognition. Type in the chat; Hermes can still speak streamed answers if speech synthesis is available.', 'muted');
+    return;
+  }
+  setVoiceBubble('Voice mode listening', 'Microphone input stays local to the browser. Hermes will speak while writing streamed answers.', 'listening');
+  state.recognition.start();
+}
+
+function stopVoiceConversation() {
+  state.voiceMode = false;
+  state.voiceStreamBuffer = '';
+  try { state.recognition?.stop(); } catch (_) { /* ignore inactive recognizer */ }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  updateVoiceControls();
+  $('voiceStatus').textContent = 'Voice conversation stopped. Text input is active.';
+  $('chatInput').focus();
+}
+
+function toggleVoiceMute() {
+  state.voiceMuted = !state.voiceMuted;
+  if (state.voiceMuted && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  updateVoiceControls();
+  setVoiceBubble(state.voiceMuted ? 'Voice muted' : 'Voice unmuted', state.voiceMuted ? 'Hermes will keep writing, but audio is muted.' : 'Hermes will speak upcoming streamed sentence chunks.', state.voiceMuted ? 'muted' : 'listening');
 }
 
 async function streamHermesMessage(item, question) {
@@ -312,10 +397,12 @@ async function streamHermesMessage(item, question) {
       const target = ensureStreamTarget(item, adapterMode);
       answer += data.delta;
       target.textContent = answer;
+      handleVoiceDelta(data.delta);
       $('chatLog').scrollTop = $('chatLog').scrollHeight;
     }
     if (event === 'done') {
       state.streamPhase = 'stream_done';
+      flushVoiceBuffer();
       if (!answer.trim()) updateHermesProgress(item, 'Hermes returned no text. Try again.');
     }
   };
@@ -739,15 +826,14 @@ async function recordApproval(decision) {
 
 function speak(text) {
   if (!('speechSynthesis' in window)) { $('voiceStatus').textContent = 'Browser speech synthesis unavailable. Text chat remains available.'; return; }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.92;
-  utterance.onstart = () => $('voiceStatus').textContent = 'Speaking through browser voice demo — no telephony connected.';
-  utterance.onend = () => $('voiceStatus').textContent = 'Voice bridge idle. Text chat is always available.';
-  window.speechSynthesis.speak(utterance);
+  state.voiceMode = true;
+  updateVoiceControls();
+  setVoiceBubble('Hermes is talking', 'Speaking requested summary through the browser voice bridge — no telephony connected.', 'speaking');
+  speakLiveChunk(text, { interrupt: true });
 }
 
 function setupVoice() {
+  updateVoiceControls();
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
     $('voiceListenBtn').disabled = true;
@@ -759,11 +845,12 @@ function setupVoice() {
   state.recognition.onresult = (event) => {
     const transcript = event.results[event.results.length - 1][0].transcript;
     $('chatInput').value = transcript;
+    setVoiceBubble('Hermes heard you', transcript, 'listening');
     askHermes(transcript);
   };
-  state.recognition.onstart = () => $('voiceStatus').textContent = 'Listening through browser microphone permission — no telephony connected.';
-  state.recognition.onerror = () => $('voiceStatus').textContent = 'Voice input failed or permission was denied. Text chat is still available.';
-  state.recognition.onend = () => $('voiceStatus').textContent = 'Voice bridge idle. Text chat is always available.';
+  state.recognition.onstart = () => setVoiceBubble('Listening', 'Listening through browser microphone permission — no telephony connected.', 'listening');
+  state.recognition.onerror = () => setVoiceBubble('Voice input failed', 'Permission failed or browser voice input stopped. Text chat is still available.', 'muted');
+  state.recognition.onend = () => { if (state.voiceMode) setVoiceBubble('Voice mode ready', 'Ask another question, mute, or stop conversation to return to text.', 'listening'); };
 }
 
 function bind() {
@@ -777,7 +864,10 @@ function bind() {
   $('reviseBtn').addEventListener('click', reviseDossier);
   $('approveBtn').addEventListener('click', () => recordApproval('approved_local'));
   $('rejectBtn').addEventListener('click', () => recordApproval('rejected_local'));
-  $('voiceListenBtn').addEventListener('click', () => state.recognition?.start());
+  $('voiceModeBtn').addEventListener('click', startVoiceConversation);
+  $('muteVoiceBtn').addEventListener('click', toggleVoiceMute);
+  $('stopVoiceBtn').addEventListener('click', stopVoiceConversation);
+  $('voiceListenBtn').addEventListener('click', startVoiceConversation);
   $('speakSituationBtn').addEventListener('click', () => speak(`Current situation: ${state.incident?.title}. ${state.incident?.impact.complaint_spike} complaint spike in ${state.incident?.impact.affected_journey}.`));
   $('speakDossierBtn').addEventListener('click', () => speak(state.incident?.dossier?.executive_summary || 'The dossier is not ready yet.'));
   $('simulateCallerBtn').addEventListener('click', () => askHermes('I cannot receive my MFA code. Is my card still working?'));

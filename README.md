@@ -113,6 +113,10 @@ The frontend shell includes a clear mode switch between:
 - `Voice`,
 - `Operator view`.
 
+MVP voice UX now lives primarily inside the Hermes chat panel: pressing `Talk` opens a voice bubble, microphone input asks Hermes, streamed text continues to render live, sentence chunks are spoken as they arrive, `Mute` silences audio without stopping text, and `Stop conversation` returns the operator to normal text input.
+
+Target local TTS engine: `Kokoro-82M`. It is small, fast, open/free to run locally, and appropriate for the MVP. The current browser shell keeps a browser `speechSynthesis` bridge for zero-install demos; the next backend voice pass should add a local Kokoro streaming TTS endpoint so audio chunks are generated server-side from the same Hermes SSE deltas.
+
 Voice support is deliberately split into documented Hermes capabilities and a labeled app-side bridge:
 
 - Hermes-documented voice capabilities used as the product boundary:

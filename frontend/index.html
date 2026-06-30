@@ -99,11 +99,11 @@
         </section>
 
         <section id="tab-voice" class="tab-panel">
-          <div class="panel-head"><div><span class="eyebrow">Voice Operator Mode</span><h2>Browser voice demo — no telephony connected</h2></div><span class="state-chip">No telephony</span></div>
-          <p class="muted-text">Browser-only voice bridge. Text chat is always available.</p>
+          <div class="panel-head"><div><span class="eyebrow">Voice Operator Mode</span><h2>Voice lives inside Hermes chat</h2></div><span class="state-chip">No telephony</span></div>
+          <p class="muted-text">The MVP voice UX is a chat bubble, not a separate control room. Use Talk in the Hermes command panel to start microphone input, see a live voice bubble while Hermes writes, mute speech, or stop the conversation and return to text input.</p>
           <div class="voice-groups">
             <section class="voice-group"><h3>Input</h3><button id="voiceListenBtn" class="btn secondary">Start voice input</button><p class="microcopy">Uses browser microphone permission only. No calls are placed.</p></section>
-            <section class="voice-group"><h3>Output</h3><div class="button-row wrap"><button id="speakSituationBtn" class="btn secondary">Speak situation</button><button id="speakDossierBtn" class="btn secondary">Speak dossier</button></div></section>
+            <section class="voice-group"><h3>Output</h3><div class="button-row wrap"><button id="speakSituationBtn" class="btn secondary">Speak situation</button><button id="speakDossierBtn" class="btn secondary">Speak dossier</button></div><p class="microcopy">Browser TTS speaks sentence chunks as streaming text arrives; Kokoro-82M is the target local TTS engine for backend streaming voice.</p></section>
             <section class="voice-group"><h3>Simulation</h3><button id="simulateCallerBtn" class="btn secondary">Simulate caller question</button><p class="microcopy">Synthetic caller prompt. Not connected to telephony or customer records.</p></section>
           </div>
           <p id="voiceStatus" class="muted-text">Voice bridge idle. Text chat is always available.</p>
@@ -114,9 +114,16 @@
         <section class="panel chat-panel">
           <div class="panel-head"><div><span class="eyebrow">Hermes command</span><h2>Ask during investigation</h2></div><button id="expandChatBtn" class="btn secondary compact" type="button" aria-pressed="false">Expand chat</button></div>
           <div id="chatLog" class="chat-log" aria-live="polite"></div>
+          <div id="voiceBubble" class="voice-bubble" hidden aria-live="polite">
+            <div class="voice-orb" aria-hidden="true"><span></span></div>
+            <div><strong id="voiceBubbleTitle">Voice mode ready</strong><p id="voiceBubbleText">Ask by voice. Hermes will speak while it writes.</p></div>
+          </div>
           <div id="suggestedPrompts" class="prompt-list"></div>
           <form id="chatForm" class="chat-form">
             <input id="chatInput" class="input" placeholder="What is happening?" autocomplete="off" />
+            <button id="voiceModeBtn" class="btn secondary" type="button">Talk</button>
+            <button id="muteVoiceBtn" class="btn secondary" type="button" hidden>Mute</button>
+            <button id="stopVoiceBtn" class="btn danger" type="button" hidden>Stop conversation</button>
             <button class="btn primary" type="submit">Ask</button>
           </form>
         </section>
