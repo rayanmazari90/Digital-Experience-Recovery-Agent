@@ -3,155 +3,347 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Interactive Digital Experience Recovery Agent incident command cockpit." />
-  <title>Digital Experience Recovery Agent</title>
+  <meta name="description" content="DERA — AI-powered digital experience recovery cockpit for incident command." />
+  <title>DERA · Digital Experience Recovery Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
+  <!-- Three.js for spheron 3D model -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body data-product-state="disconnected">
-  <main class="cockpit" id="main">
-    <header class="topbar">
-      <div>
-        <p class="kicker">Apex Global Bank · Digital Operations</p>
-        <h1>Digital Experience Recovery Agent</h1>
+
+  <!-- ════════════════════════════════════ TOP BAR ════ -->
+  <header class="topbar">
+
+    <div class="topbar-brand">
+      <div class="brand-mark" aria-hidden="true">
+        <canvas id="logoCanvas" class="logo-canvas"></canvas>
       </div>
-      <div class="status-strip" aria-label="Runtime status">
-        <span id="backendStatus" class="pill muted">Backend checking</span>
-        <span id="hermesStatus" class="pill muted">Hermes checking</span>
-        <span class="pill safe">Demo data safe mode</span>
-        <span id="severityStatus" class="pill danger">SEV-2</span>
+      <div class="brand-text">
+        <span class="brand-name">DERA</span>
+        <span class="brand-sub">Apex Global · Digital Ops</span>
       </div>
+    </div>
+
+    <div class="status-strip" aria-label="Runtime status">
+      <span id="backendStatus" class="pill muted">Backend checking</span>
+      <span id="hermesStatus" class="pill muted">Hermes checking</span>
+      <span class="pill safe">Demo safe mode</span>
+      <span id="severityStatus" class="pill danger">SEV-2</span>
+    </div>
+
+    <div class="topbar-actions">
       <div class="primary-action-wrap">
         <button id="primaryCta" class="btn primary">Start investigation</button>
         <p id="primaryCtaReason" class="cta-reason" hidden>Ready.</p>
       </div>
-    </header>
+    </div>
 
-    <section class="console-grid" aria-label="Incident command workspace">
+  </header>
+
+  <!-- ════════════════════════════════════ COCKPIT ════ -->
+  <main class="cockpit" id="main">
+    <div class="cockpit-grid">
+
+      <!-- ── LEFT RAIL ── -->
       <aside class="left-rail">
-        <article class="panel incident-card">
-          <div class="panel-head"><span class="eyebrow">Active incident</span><span id="incidentState" class="state-chip">Disconnected</span></div>
+
+        <article class="glass-panel incident-card">
+          <div class="panel-head">
+            <span class="eyebrow">Active incident</span>
+            <span id="incidentState" class="state-chip">Disconnected</span>
+          </div>
           <h2 id="incidentTitle">Login authentication degradation</h2>
-          <p id="incidentSummary">Customers are reporting MFA codes not arriving during login.</p>
+          <p id="incidentSummary" class="panel-summary">Customers reporting MFA codes not arriving during login.</p>
           <div class="metric-grid">
-            <div><span>Complaint spike</span><strong id="metricSpike">37%</strong></div>
-            <div><span>Affected journey</span><strong id="metricJourney">Login / Authentication</strong></div>
-            <div><span>Estimated users</span><strong id="metricUsers">18.4k</strong></div>
-            <div><span>Still operational</span><strong id="metricOperational">Cards · ATM</strong><div id="operationalChips" class="chip-row"></div></div>
+            <div class="metric-item">
+              <span class="metric-label">Complaint spike</span>
+              <strong id="metricSpike">37%</strong>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Affected journey</span>
+              <strong id="metricJourney">Login / Auth</strong>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Estimated users</span>
+              <strong id="metricUsers">18.4k</strong>
+            </div>
+            <div class="metric-item metric-full">
+              <span class="metric-label">Operational</span>
+              <strong id="metricOperational">Cards · ATM</strong>
+              <div id="operationalChips" class="chip-row"></div>
+            </div>
           </div>
         </article>
 
-        <article class="panel journey-card">
-          <div class="panel-head"><span class="eyebrow">Customer journey</span></div>
+        <article class="glass-panel journey-card">
+          <div class="panel-head">
+            <span class="eyebrow">Customer journey</span>
+          </div>
           <ol id="journeyList" class="journey-list">
-            <li data-lane="customer"><strong>Login attempt</strong><span>Password accepted, MFA requested.</span></li>
-            <li data-lane="customer"><strong>MFA wait</strong><span>Code delivery delayed or missing.</span></li>
-            <li data-lane="telemetry"><strong>Gateway validation</strong><span>Latency and 504 errors emerge.</span></li>
-            <li data-lane="recovery"><strong>Recovery path</strong><span>Rollback and communication require approval.</span></li>
+            <li data-lane="customer">
+              <strong>Login attempt</strong>
+              <span>Password accepted, MFA requested.</span>
+            </li>
+            <li data-lane="customer">
+              <strong>MFA wait</strong>
+              <span>Code delivery delayed or missing.</span>
+            </li>
+            <li data-lane="telemetry">
+              <strong>Gateway validation</strong>
+              <span>Latency and 504 errors emerge.</span>
+            </li>
+            <li data-lane="recovery">
+              <strong>Recovery path</strong>
+              <span>Rollback and communication require approval.</span>
+            </li>
           </ol>
         </article>
 
-        <article class="panel next-step-card">
+        <article class="glass-panel focus-card">
           <span class="eyebrow">Operator focus</span>
           <h2 id="operatorFocus">Start with Hermes</h2>
-          <p id="operatorGuidance">Ask Hermes to investigate, then follow the timeline, evidence, agents, and dossier tabs as the case develops.</p>
+          <p id="operatorGuidance" class="panel-summary">Ask Hermes to investigate, then follow the timeline, evidence, agents, and dossier tabs as the case develops.</p>
         </article>
+
       </aside>
 
-      <section class="workspace panel" aria-label="Tabbed incident workspace">
-        <div id="stageTracker" class="stage-tracker" aria-label="Investigation stage tracker"></div>
-        <nav class="workspace-tabs" aria-label="Incident workspace tabs">
-          <button class="tab active" data-tab="timeline">Chronology</button>
-          <button class="tab" data-tab="evidence">Evidence</button>
-          <button class="tab" data-tab="agents">Agents</button>
-          <button class="tab" data-tab="dossier">Dossier</button>
-          <button class="tab" data-tab="voice">Voice</button>
-        </nav>
+      <!-- ── CENTER WORKSPACE ── -->
+      <section class="workspace glass-panel" aria-label="Incident command workspace">
+
+        <div id="stageTracker" class="stage-tracker" aria-label="Investigation stages"></div>
+
         <section id="activeWorkstream" class="active-workstream" aria-live="polite" hidden></section>
 
+        <nav class="workspace-tabs" aria-label="Workspace tabs">
+          <button class="tab active" data-tab="timeline">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M8 4v4.5l3 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Chronology
+          </button>
+          <button class="tab" data-tab="evidence">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            Evidence
+          </button>
+          <button class="tab" data-tab="agents">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="3.5" stroke="currentColor" stroke-width="1.6"/><path d="M1 15c0-3.866 3.134-6 7-6s7 2.134 7 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            Agents
+          </button>
+          <button class="tab" data-tab="dossier">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.6"/><path d="M5 6h6M5 8.5h4M5 11h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            Dossier
+          </button>
+          <button class="tab" data-tab="voice">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5" y="1" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M2 9c0 3.314 2.686 5 6 5s6-1.686 6-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8 14v1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            Voice
+          </button>
+        </nav>
+
+        <!-- TIMELINE -->
         <section id="tab-timeline" class="tab-panel active" aria-live="polite">
-          <div class="panel-head"><div><span class="eyebrow">Chronology</span><h2>Incident handling timeline</h2></div><button id="technicalTimelineBtn" class="btn secondary">Ask Hermes for technical timeline</button></div>
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Chronology</span>
+              <h2>Incident handling timeline</h2>
+            </div>
+            <button id="technicalTimelineBtn" class="btn secondary">Ask Hermes for technical timeline</button>
+          </div>
           <div id="timelineRail" class="timeline-rail"></div>
         </section>
 
+        <!-- EVIDENCE -->
         <section id="tab-evidence" class="tab-panel" aria-live="polite">
-          <div class="panel-head"><div><span class="eyebrow">Evidence canvas</span><h2>Customer pain and technical evidence</h2></div></div>
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Evidence canvas</span>
+              <h2>Customer pain and technical evidence</h2>
+            </div>
+          </div>
           <div id="evidenceCanvas" class="evidence-canvas"></div>
         </section>
 
+        <!-- AGENTS -->
         <section id="tab-agents" class="tab-panel" aria-live="polite">
-          <div class="panel-head"><div><span class="eyebrow">Sub-agent operations</span><h2>Hermes specialist workstream</h2></div></div>
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Sub-agent operations</span>
+              <h2>Hermes specialist workstream</h2>
+            </div>
+          </div>
           <div id="agentList" class="agent-list"></div>
         </section>
 
+        <!-- DOSSIER -->
         <section id="tab-dossier" class="tab-panel" aria-live="polite">
-          <div class="panel-head"><div><span class="eyebrow">Recovery dossier</span><h2 id="dossierStatus">Waiting for Hermes to build the case</h2></div><span id="confidenceChip" class="pill muted">Confidence pending</span></div>
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Recovery dossier</span>
+              <h2 id="dossierStatus">Waiting for Hermes to build the case</h2>
+            </div>
+            <span id="confidenceChip" class="pill muted">Confidence pending</span>
+          </div>
           <div id="dossierReadiness" class="dossier-readiness"></div>
           <div id="dossierContent" class="dossier-content"></div>
           <div id="revisionTools" class="revision-tools" hidden>
-            <select id="revisionField" class="input"><option value="customer_communication">Customer message</option><option value="executive_summary">Executive summary</option><option value="recommended_recovery">Technical action wording</option><option value="risks">Risk explanation</option></select>
+            <select id="revisionField" class="input">
+              <option value="customer_communication">Customer message</option>
+              <option value="executive_summary">Executive summary</option>
+              <option value="recommended_recovery">Technical action wording</option>
+              <option value="risks">Risk explanation</option>
+            </select>
             <input id="revisionInstruction" class="input" placeholder="Revision instruction, e.g. make this calmer for customers" />
             <button id="reviseBtn" class="btn secondary">Ask Hermes to revise dossier</button>
           </div>
           <div id="approvalGate" class="approval-gate" hidden>
             <p><strong>Local synthetic recovery gate.</strong> Approval records a local safe-demo decision only. No rollback, customer message, telephony, or bank system is touched.</p>
-            <div class="button-row"><button id="approveBtn" class="btn primary">Approve local synthetic recovery</button><button id="rejectBtn" class="btn danger">Reject recommendation</button></div>
+            <div class="button-row">
+              <button id="approveBtn" class="btn primary">Approve synthetic recovery</button>
+              <button id="rejectBtn" class="btn danger">Reject recommendation</button>
+            </div>
           </div>
         </section>
 
+        <!-- VOICE TAB -->
         <section id="tab-voice" class="tab-panel">
-          <div class="panel-head"><div><span class="eyebrow">Voice Operator Mode</span><h2>Voice lives inside Hermes chat</h2></div><span class="state-chip">No telephony</span></div>
-          <p class="muted-text">The MVP voice UX is a chat bubble, not a separate control room. Use Talk in the Hermes command panel to start microphone input, see a live voice bubble while Hermes writes, mute Hermes audio, turn the mic on/off, or stop the conversation and return to text input.</p>
-          <div class="voice-groups">
-            <section class="voice-group"><h3>Input</h3><button id="voiceListenBtn" class="btn secondary">Start voice input</button><p class="microcopy">Uses browser microphone permission only. No calls are placed.</p></section>
-            <section class="voice-group"><h3>Output</h3><div class="button-row wrap"><button id="speakSituationBtn" class="btn secondary">Speak situation</button><button id="speakDossierBtn" class="btn secondary">Speak dossier</button></div><p class="microcopy">Browser TTS speaks sentence chunks as streaming text arrives; Kokoro-82M is the target local TTS engine for backend streaming voice.</p></section>
-            <section class="voice-group"><h3>Simulation</h3><button id="simulateCallerBtn" class="btn secondary">Simulate caller question</button><p class="microcopy">Synthetic caller prompt. Not connected to telephony or customer records.</p></section>
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Voice Operator Mode</span>
+              <h2>Hermes voice interface</h2>
+            </div>
+            <span class="state-chip">No telephony</span>
           </div>
-          <p id="voiceStatus" class="muted-text">Voice bridge idle. Text chat is always available.</p>
+          <p class="muted-text">The voice UX is integrated in the Hermes command panel. Press Talk to open the voice overlay, see Hermes writing live, mute audio, or stop the conversation.</p>
+          <div class="voice-groups">
+            <section class="voice-group">
+              <h3>Input</h3>
+              <button id="voiceListenBtn" class="btn secondary">Start voice input</button>
+              <p class="microcopy">Uses browser microphone permission only. No calls are placed.</p>
+            </section>
+            <section class="voice-group">
+              <h3>Output</h3>
+              <div class="button-row">
+                <button id="speakSituationBtn" class="btn secondary">Speak situation</button>
+                <button id="speakDossierBtn" class="btn secondary">Speak dossier</button>
+              </div>
+              <p class="microcopy">Browser TTS speaks sentence chunks as streaming text arrives. Kokoro-82M is the target local TTS engine.</p>
+            </section>
+            <section class="voice-group">
+              <h3>Simulation</h3>
+              <button id="simulateCallerBtn" class="btn secondary">Simulate caller question</button>
+              <p class="microcopy">Synthetic caller prompt. Not connected to telephony or customer records.</p>
+            </section>
+          </div>
+          <p id="voiceStatus" class="muted-text voice-status-indicator">Voice bridge idle. Text chat is always available.</p>
         </section>
+
       </section>
 
+      <!-- ── RIGHT RAIL: HERMES CHAT ── -->
       <aside class="right-rail">
-        <section class="panel chat-panel">
-          <div class="panel-head"><div><span class="eyebrow">Hermes command</span><h2>Ask during investigation</h2></div><button id="expandChatBtn" class="btn secondary compact" type="button" aria-pressed="false">Expand chat</button></div>
-          <div id="chatLog" class="chat-log" aria-live="polite"></div>
-          <div id="voiceBubble" class="voice-bubble" hidden aria-live="polite">
-            <div class="voice-orb" aria-hidden="true"><span></span></div>
-            <div><strong id="voiceBubbleTitle">Voice mode ready</strong><p id="voiceBubbleText">Ask by voice. Hermes will speak while it writes.</p></div>
+        <section class="glass-panel chat-panel">
+
+          <div class="panel-head chat-panel-head">
+            <div>
+              <span class="eyebrow">Hermes command</span>
+              <h2>Ask during investigation</h2>
+            </div>
+            <button id="expandChatBtn" class="btn secondary compact" type="button" aria-pressed="false">Expand</button>
           </div>
+
           <div id="suggestedPrompts" class="prompt-list"></div>
-          <div id="chatHint" class="chat-hint" hidden>Type a question, or click one of the suggested prompt chips above.</div>
+          <div id="chatHint" class="chat-hint" hidden>Type a question or click a suggested prompt above.</div>
+          <div id="chatLog" class="chat-log" aria-live="polite"></div>
+
           <form id="chatForm" class="chat-form">
-            <input id="chatInput" class="input" placeholder="What is happening?" autocomplete="off" />
-            <button id="voiceModeBtn" class="btn secondary" type="button">Talk</button>
-            <button id="micVoiceBtn" class="btn secondary" type="button" hidden>Mic off</button>
-            <button id="muteVoiceBtn" class="btn secondary" type="button" hidden>Mute Hermes</button>
-            <button id="stopVoiceBtn" class="btn danger" type="button" hidden>Stop conversation</button>
-            <button class="btn primary" type="submit">Ask</button>
+            <input id="chatInput" class="input chat-input" placeholder="What is happening?" autocomplete="off" />
+            <div class="chat-form-btns">
+              <button id="voiceModeBtn" class="btn voice-pill" type="button" title="Talk to Hermes">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="5" y="1" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M2 9c0 3.314 2.686 5 6 5s6-1.686 6-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8 14v1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                Talk
+              </button>
+              <button class="btn primary send-btn" type="submit">Ask</button>
+            </div>
           </form>
+
         </section>
       </aside>
-    </section>
 
-    <details class="advanced-drawer">
-      <summary>Advanced raw streams</summary>
-      <pre id="rawState">No runtime events yet.</pre>
-    </details>
+    </div>
   </main>
 
+  <!-- ════════════════════════════════════ SIRI VOICE OVERLAY ════ -->
+  <div id="voiceBubble" class="voice-overlay" hidden aria-live="polite" data-voice-state="idle">
+
+    <div class="overlay-backdrop" aria-hidden="true"></div>
+
+    <!-- Spheron 3D model canvas -->
+    <div class="voice-orb-wrap" aria-hidden="true">
+      <canvas id="spheronCanvas" class="spheron-canvas"></canvas>
+    </div>
+
+    <!-- Status text -->
+    <div class="voice-status-text">
+      <strong id="voiceBubbleTitle">Voice mode ready</strong>
+      <p id="voiceBubbleText">Ask by voice. Hermes will speak while it writes.</p>
+    </div>
+
+    <!-- Controls inside overlay -->
+    <div class="voice-overlay-controls">
+      <button id="micVoiceBtn" class="voice-ctrl-btn" type="button" hidden>
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 3l14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="6" y="1" width="8" height="12" rx="4" stroke="currentColor" stroke-width="1.6"/><path d="M3 10a7 7 0 0012.6 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 17v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Mic off
+      </button>
+      <button id="muteVoiceBtn" class="voice-ctrl-btn" type="button" hidden>
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M2 10l4-3v6l4-5v8l4-4v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Mute Hermes
+      </button>
+      <button id="stopVoiceBtn" class="voice-ctrl-btn voice-ctrl-stop" type="button" hidden>
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor"/></svg>
+        Stop
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════════════════════ ADVANCED RAW ════ -->
+  <details class="advanced-drawer">
+    <summary>Raw event stream</summary>
+    <pre id="rawState">No runtime events yet.</pre>
+  </details>
+
+  <!-- ════════════════════════════════════ EVIDENCE DRAWER ════ -->
   <aside id="evidenceDrawer" class="drawer" hidden aria-label="Evidence details">
+    <div class="drawer-backdrop"></div>
     <div class="drawer-card">
-      <button id="drawerClose" class="drawer-close" aria-label="Close evidence drawer">×</button>
+      <button id="drawerClose" class="drawer-close" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
       <p id="drawerLane" class="eyebrow">Evidence</p>
       <h2 id="drawerTitle"></h2>
       <p id="drawerSummary"></p>
       <div id="drawerHumanDetails" class="drawer-human-details"></div>
-      <details class="raw-evidence"><summary>Raw evidence</summary><pre id="drawerDetails"></pre></details>
+      <details class="raw-evidence">
+        <summary>Raw evidence</summary>
+        <pre id="drawerDetails"></pre>
+      </details>
     </div>
   </aside>
 
+  <!-- ════════════════════════════════════ AGENT DRAWER ════ -->
   <aside id="agentDrawer" class="drawer" hidden aria-label="Agent work details">
+    <div class="drawer-backdrop"></div>
     <div class="drawer-card agent-drawer-card">
-      <button id="agentDrawerClose" class="drawer-close" aria-label="Close agent drawer">×</button>
+      <button id="agentDrawerClose" class="drawer-close" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
       <p id="agentDrawerKicker" class="eyebrow">Agent workstream</p>
       <h2 id="agentDrawerTitle"></h2>
       <p id="agentDrawerSummary"></p>
@@ -160,5 +352,6 @@
   </aside>
 
   <script src="./app.js" defer></script>
+  <script type="module" src="./spheron-viewer.js"></script>
 </body>
 </html>

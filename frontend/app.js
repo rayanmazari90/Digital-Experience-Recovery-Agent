@@ -476,7 +476,7 @@ async function streamHermesMessage(item, question) {
 function toggleChatExpanded() {
   state.chatExpanded = !state.chatExpanded;
   document.body.classList.toggle('chat-expanded', state.chatExpanded);
-  $('expandChatBtn').textContent = state.chatExpanded ? 'Collapse chat' : 'Expand chat';
+  $('expandChatBtn').textContent = state.chatExpanded ? 'Collapse' : 'Expand';
   $('expandChatBtn').setAttribute('aria-pressed', String(state.chatExpanded));
 }
 
