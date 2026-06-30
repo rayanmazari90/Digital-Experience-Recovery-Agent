@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Local runtime data
+var/
+*.sqlite3
+*.db
+workspace-storage/
+.env
+
+# Private / large source corpus
+# Keep derived product docs in docs/, but do not publish raw course decks,
+# extracted course text, or private assignment briefs to the public repo.
+docs/source/course-materials/
+docs/source/extracted-text/
+docs/source/project-brief/
+
+# OS/editor
+.DS_Store

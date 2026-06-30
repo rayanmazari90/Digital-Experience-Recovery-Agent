@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Interactive Digital Experience Recovery Agent incident command cockpit." />
+  <title>Digital Experience Recovery Agent</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-product-state="disconnected">
+  <main class="cockpit" id="main">
+    <header class="topbar">
+      <div>
+        <p class="kicker">Apex Global Bank · Digital Operations</p>
+        <h1>Digital Experience Recovery Agent</h1>
+      </div>
+      <div class="status-strip" aria-label="Runtime status">
+        <span id="backendStatus" class="pill muted">Backend checking</span>
+        <span id="hermesStatus" class="pill muted">Hermes checking</span>
+        <span class="pill safe">Demo data safe mode</span>
+        <span id="severityStatus" class="pill danger">SEV-2</span>
+      </div>
+      <div class="primary-action-wrap">
+        <button id="primaryCta" class="btn primary">Start investigation</button>
+        <p id="primaryCtaReason" class="cta-reason" hidden>Ready.</p>
+      </div>
+    </header>
+
+    <section class="console-grid" aria-label="Incident command workspace">
+      <aside class="left-rail">
+        <article class="panel incident-card">
+          <div class="panel-head"><span class="eyebrow">Active incident</span><span id="incidentState" class="state-chip">Disconnected</span></div>
+          <h2 id="incidentTitle">Login authentication degradation</h2>
+          <p id="incidentSummary">Customers are reporting MFA codes not arriving during login.</p>
+          <div class="metric-grid">
+            <div><span>Complaint spike</span><strong id="metricSpike">37%</strong></div>
+            <div><span>Affected journey</span><strong id="metricJourney">Login / Authentication</strong></div>
+            <div><span>Estimated users</span><strong id="metricUsers">18.4k</strong></div>
+            <div><span>Still operational</span><strong id="metricOperational">Cards · ATM</strong><div id="operationalChips" class="chip-row"></div></div>
+          </div>
+        </article>
+
+        <article class="panel journey-card">
+          <div class="panel-head"><span class="eyebrow">Customer journey</span></div>
+          <ol id="journeyList" class="journey-list">
+            <li data-lane="customer"><strong>Login attempt</strong><span>Password accepted, MFA requested.</span></li>
+            <li data-lane="customer"><strong>MFA wait</strong><span>Code delivery delayed or missing.</span></li>
+            <li data-lane="telemetry"><strong>Gateway validation</strong><span>Latency and 504 errors emerge.</span></li>
+            <li data-lane="recovery"><strong>Recovery path</strong><span>Rollback and communication require approval.</span></li>
+          </ol>
+        </article>
+
+        <article class="panel next-step-card">
+          <span class="eyebrow">Operator focus</span>
+          <h2 id="operatorFocus">Start with Hermes</h2>
+          <p id="operatorGuidance">Ask Hermes to investigate, then follow the timeline, evidence, agents, and dossier tabs as the case develops.</p>
+        </article>
+      </aside>
+
+      <section class="workspace panel" aria-label="Tabbed incident workspace">
+        <div id="stageTracker" class="stage-tracker" aria-label="Investigation stage tracker"></div>
+        <nav class="workspace-tabs" aria-label="Incident workspace tabs">
+          <button class="tab active" data-tab="timeline">Chronology</button>
+          <button class="tab" data-tab="evidence">Evidence</button>
+          <button class="tab" data-tab="agents">Agents</button>
+          <button class="tab" data-tab="dossier">Dossier</button>
+          <button class="tab" data-tab="voice">Voice</button>
+        </nav>
+        <section id="activeWorkstream" class="active-workstream" aria-live="polite" hidden></section>
+
+        <section id="tab-timeline" class="tab-panel active" aria-live="polite">
+          <div class="panel-head"><div><span class="eyebrow">Chronology</span><h2>Incident handling timeline</h2></div><button id="technicalTimelineBtn" class="btn secondary">Ask Hermes for technical timeline</button></div>
+          <div id="timelineRail" class="timeline-rail"></div>
+        </section>
+
+        <section id="tab-evidence" class="tab-panel" aria-live="polite">
+          <div class="panel-head"><div><span class="eyebrow">Evidence canvas</span><h2>Customer pain and technical evidence</h2></div></div>
+          <div id="evidenceCanvas" class="evidence-canvas"></div>
+        </section>
+
+        <section id="tab-agents" class="tab-panel" aria-live="polite">
+          <div class="panel-head"><div><span class="eyebrow">Sub-agent operations</span><h2>Hermes specialist workstream</h2></div></div>
+          <div id="agentList" class="agent-list"></div>
+        </section>
+
+        <section id="tab-dossier" class="tab-panel" aria-live="polite">
+          <div class="panel-head"><div><span class="eyebrow">Recovery dossier</span><h2 id="dossierStatus">Waiting for Hermes to build the case</h2></div><span id="confidenceChip" class="pill muted">Confidence pending</span></div>
+          <div id="dossierReadiness" class="dossier-readiness"></div>
+          <div id="dossierContent" class="dossier-content"></div>
+          <div id="revisionTools" class="revision-tools" hidden>
+            <select id="revisionField" class="input"><option value="customer_communication">Customer message</option><option value="executive_summary">Executive summary</option><option value="recommended_recovery">Technical action wording</option><option value="risks">Risk explanation</option></select>
+            <input id="revisionInstruction" class="input" placeholder="Revision instruction, e.g. make this calmer for customers" />
+            <button id="reviseBtn" class="btn secondary">Ask Hermes to revise dossier</button>
+          </div>
+          <div id="approvalGate" class="approval-gate" hidden>
+            <p><strong>Local synthetic recovery gate.</strong> Approval records a local safe-demo decision only. No rollback, customer message, telephony, or bank system is touched.</p>
+            <div class="button-row"><button id="approveBtn" class="btn primary">Approve local synthetic recovery</button><button id="rejectBtn" class="btn danger">Reject recommendation</button></div>
+          </div>
+        </section>
+
+        <section id="tab-voice" class="tab-panel">
+          <div class="panel-head"><div><span class="eyebrow">Voice Operator Mode</span><h2>Browser voice demo — no telephony connected</h2></div><span class="state-chip">No telephony</span></div>
+          <p class="muted-text">Browser-only voice bridge. Text chat is always available.</p>
+          <div class="voice-groups">
+            <section class="voice-group"><h3>Input</h3><button id="voiceListenBtn" class="btn secondary">Start voice input</button><p class="microcopy">Uses browser microphone permission only. No calls are placed.</p></section>
+            <section class="voice-group"><h3>Output</h3><div class="button-row wrap"><button id="speakSituationBtn" class="btn secondary">Speak situation</button><button id="speakDossierBtn" class="btn secondary">Speak dossier</button></div></section>
+            <section class="voice-group"><h3>Simulation</h3><button id="simulateCallerBtn" class="btn secondary">Simulate caller question</button><p class="microcopy">Synthetic caller prompt. Not connected to telephony or customer records.</p></section>
+          </div>
+          <p id="voiceStatus" class="muted-text">Voice bridge idle. Text chat is always available.</p>
+        </section>
+      </section>
+
+      <aside class="right-rail">
+        <section class="panel chat-panel">
+          <div class="panel-head"><div><span class="eyebrow">Hermes command</span><h2>Ask during investigation</h2></div><button id="expandChatBtn" class="btn secondary compact" type="button" aria-pressed="false">Expand chat</button></div>
+          <div id="chatLog" class="chat-log" aria-live="polite"></div>
+          <div id="suggestedPrompts" class="prompt-list"></div>
+          <form id="chatForm" class="chat-form">
+            <input id="chatInput" class="input" placeholder="What is happening?" autocomplete="off" />
+            <button class="btn primary" type="submit">Ask</button>
+          </form>
+        </section>
+      </aside>
+    </section>
+
+    <details class="advanced-drawer">
+      <summary>Advanced raw streams</summary>
+      <pre id="rawState">No runtime events yet.</pre>
+    </details>
+  </main>
+
+  <aside id="evidenceDrawer" class="drawer" hidden aria-label="Evidence details">
+    <div class="drawer-card">
+      <button id="drawerClose" class="drawer-close" aria-label="Close evidence drawer">×</button>
+      <p id="drawerLane" class="eyebrow">Evidence</p>
+      <h2 id="drawerTitle"></h2>
+      <p id="drawerSummary"></p>
+      <div id="drawerHumanDetails" class="drawer-human-details"></div>
+      <details class="raw-evidence"><summary>Raw evidence</summary><pre id="drawerDetails"></pre></details>
+    </div>
+  </aside>
+
+  <aside id="agentDrawer" class="drawer" hidden aria-label="Agent work details">
+    <div class="drawer-card agent-drawer-card">
+      <button id="agentDrawerClose" class="drawer-close" aria-label="Close agent drawer">×</button>
+      <p id="agentDrawerKicker" class="eyebrow">Agent workstream</p>
+      <h2 id="agentDrawerTitle"></h2>
+      <p id="agentDrawerSummary"></p>
+      <div id="agentDrawerBody" class="agent-drawer-body"></div>
+    </div>
+  </aside>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

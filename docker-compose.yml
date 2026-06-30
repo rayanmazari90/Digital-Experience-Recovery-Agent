@@ -1,0 +1,30 @@
+services:
+  dera-api:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - .env.example
+    environment:
+      DERA_ENV: dev
+      DERA_DATABASE_PATH: /data/dera.sqlite3
+      DERA_STORAGE_ROOT: /data/workspace-storage
+      DERA_HERMES_BASE_URL: http://host.docker.internal:8000
+      DERA_HERMES_ENABLED: "false"
+      DERA_API_AUTH_ENABLED: "true"
+      DERA_CORS_ALLOW_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+    volumes:
+      - dera-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 512m
+    restart: unless-stopped
+
+volumes:
+  dera-data:
