@@ -837,18 +837,47 @@ async function advanceInvestigationStep() {
   }
 }
 
+function showChatInputHint(message = 'Type a question, or click one of the suggested prompt chips above.') {
+  const hint = $('chatHint');
+  if (hint) {
+    hint.textContent = message;
+    hint.hidden = false;
+  }
+  $('chatInput').classList.add('needs-input');
+  $('chatInput').focus();
+  window.setTimeout(() => {
+    $('chatInput').classList.remove('needs-input');
+  }, 900);
+}
+
+function clearChatInputHint() {
+  const hint = $('chatHint');
+  if (hint) hint.hidden = true;
+  $('chatInput').classList.remove('needs-input');
+}
+
+function chatQuestionFromInput() {
+  return $('chatInput').value.trim();
+}
+
 async function askHermes(question) {
-  if (!question || !state.incident) return;
-  addChat('operator', question);
+  const cleanQuestion = String(question || '').trim();
+  if (!cleanQuestion) {
+    showChatInputHint();
+    return;
+  }
+  if (!state.incident) return;
+  clearChatInputHint();
+  addChat('operator', cleanQuestion);
   const pending = addHermesWritingMessage('Opening incident context...');
   $('chatInput').value = '';
   try {
-    await streamHermesMessage(pending, question);
+    await streamHermesMessage(pending, cleanQuestion);
   } catch (streamError) {
     state.streamPhase = 'stream_error';
     updateHermesProgress(pending, 'Streaming failed. Trying non-streaming Hermes response...');
     try {
-      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', body: JSON.stringify({ question, voice_mode: state.voiceMode }) });
+      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', body: JSON.stringify({ question: cleanQuestion, voice_mode: state.voiceMode }) });
       await typeHermesMessage(pending, result.answer, result.adapter_mode);
     } catch (error) {
       await typeHermesMessage(pending, `I could not answer from the backend: ${error.message || streamError.message}`, 'hermes-unavailable');
@@ -911,7 +940,7 @@ function bind() {
   document.querySelectorAll('.tab').forEach((button) => button.addEventListener('click', () => setActiveTab(button.dataset.tab)));
   $('expandChatBtn').addEventListener('click', toggleChatExpanded);
   $('primaryCta').addEventListener('click', performPrimaryAction);
-  $('chatForm').addEventListener('submit', (event) => { event.preventDefault(); askHermes($('chatInput').value); });
+  $('chatForm').addEventListener('submit', (event) => { event.preventDefault(); askHermes(chatQuestionFromInput()); });
   $('technicalTimelineBtn').addEventListener('click', () => askHermes('Show me the technical timeline.'));
   $('drawerClose').addEventListener('click', () => { $('evidenceDrawer').hidden = true; state.selectedEvidence = null; renderEvidence(); });
   $('agentDrawerClose').addEventListener('click', () => { $('agentDrawer').hidden = true; });

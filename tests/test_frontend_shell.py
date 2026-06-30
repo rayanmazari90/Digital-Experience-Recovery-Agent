@@ -29,6 +29,8 @@ def test_frontend_shell_contains_interactive_incident_command_regions():
         "Uses browser microphone permission only. No calls are placed.",
         "Raw evidence",
         "Advanced raw streams",
+        "chatHint",
+        "Type a question, or click one of the suggested prompt chips above.",
     ]
     for text in required:
         assert text in html
@@ -103,6 +105,11 @@ def test_voice_operator_demo_features_are_labeled_and_bounded():
     assert "response.body.getReader" in js
     assert "typeHermesMessage" in js
     assert "toggleChatExpanded" in js
+    assert "chatQuestionFromInput" in js
+    assert "askHermes(chatQuestionFromInput())" in js
+    assert "showChatInputHint" in js
+    assert "return $('chatInput').value.trim()" in js
+    assert "if (!cleanQuestion)" in js
     assert "openAgentDrawer" in js
     assert "AGENT_WORK_SCRIPTS" in js
     assert "Visible reasoning summary" in js
