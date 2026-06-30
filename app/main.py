@@ -17,6 +17,7 @@ from app.db import Database, make_database, row_to_dict, utc_now
 from app.hermes_client import HermesClient
 from app.orchestration_guidance import PARENT_ORCHESTRATION_GUIDANCE, ROLE_GUIDANCE, SUPERVISOR_PROMPT
 from app.security import add_security_headers, audit_event, ensure_synthetic_payload, prune_expired_records, require_api_key
+from app.tts import KokoroTTS
 from app.schemas import (
     Artifact,
     Event,
@@ -44,12 +45,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     db = make_database(settings)
     hermes = HermesClient(settings)
+    tts = KokoroTTS(settings)
     settings.storage_root.mkdir(parents=True, exist_ok=True)
 
     app = FastAPI(title=settings.app_name, version="0.1.0", dependencies=[Depends(require_api_key(settings))])
     app.state.settings = settings
     app.state.db = db
     app.state.hermes = hermes
+    app.state.tts = tts
     app.state.incidents = {}
 
     origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
@@ -76,6 +79,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(status="ok", hermes_enabled=settings.hermes_enabled, hermes_base_url=settings.hermes_base_url)
+
+    @app.get("/api/voice/status")
+    def voice_status() -> dict[str, Any]:
+        available = tts.available() if settings.tts_provider == "kokoro" else False
+        return {
+            "provider": settings.tts_provider,
+            "model": "Kokoro-82M" if settings.tts_provider == "kokoro" else settings.tts_provider,
+            "available": available,
+            "voice": settings.tts_kokoro_voice,
+            "streaming_strategy": "sentence-chunk",
+            "error": None if available else tts.last_error,
+        }
+
+    @app.post("/api/voice/tts")
+    async def synthesize_voice(request: Request) -> Response:
+        body = await request.json()
+        text = body.get("text", "")
+        if settings.tts_provider != "kokoro":
+            raise HTTPException(status_code=503, detail="tts_provider_not_configured")
+        try:
+            result = tts.synthesize_wav(text)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            tts.last_error = str(exc)
+            raise HTTPException(status_code=503, detail={"code": "kokoro_unavailable", "message": str(exc)}) from exc
+        return Response(content=result.audio, media_type=result.media_type, headers={"X-DERA-TTS-Engine": result.engine})
 
     @app.get("/orchestration/guidance")
     def orchestration_guidance() -> dict[str, Any]:
@@ -423,15 +453,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def unavailable_hermes_answer(question: str, incident: dict[str, Any]) -> str:
         return (
-            "Hermes is not reachable from this backend right now, so I will not pretend to be Hermes. "
-            "The safe sample incident state is still loaded locally, but live reasoning, dossier revision, "
-            "and specialist explanations require the Hermes API server to be available."
+            "Hermes is not reachable right now, so I won’t fake a live answer. "
+            "The synthetic incident is loaded locally; live reasoning needs the Hermes API server."
         )
 
-    def hermes_incident_context(incident: dict[str, Any]) -> dict[str, Any]:
+    def hermes_incident_context(incident: dict[str, Any], *, voice_mode: bool = False) -> dict[str, Any]:
+        answer_style = (
+            "Voice conversation mode: answer like a calm human incident copilot. Use 1-3 short sentences, under 45 words, no long lists unless explicitly requested."
+            if voice_mode
+            else "Default chat mode: be concise by default. Use 2-4 short bullets or a short paragraph; give long explanations only when the operator asks for detail."
+        )
         return {
             "product_role": "You are Hermes, the live Digital Experience Recovery Agent inside the Apex Global Bank cockpit.",
             "instruction": "Answer as the actual Hermes agent. Reason over the provided sample incident state. Do not claim real bank-system access. Make it clear that approvals are local synthetic recovery decisions only.",
+            "answer_style": answer_style,
             "state": incident["state"],
             "incident": incident["title"],
             "severity": incident["severity"],
@@ -487,6 +522,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         incident = get_incident_or_404(incident_id)
         body = await request.json()
         question = body.get("question", "What is happening?")
+        voice_mode = bool(body.get("voice_mode"))
 
         async def event_generator():
             answer_parts: list[str] = []
@@ -494,7 +530,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield f"event: status\ndata: {json.dumps({'adapter_mode': adapter_mode, 'message': 'Hermes is writing'})}\n\n"
             if settings.hermes_enabled:
                 try:
-                    async for chunk in hermes.hermes_chat_stream(prompt=question, context=hermes_incident_context(incident)):
+                    async for chunk in hermes.hermes_chat_stream(prompt=question, context=hermes_incident_context(incident, voice_mode=voice_mode)):
                         answer_parts.append(chunk)
                         yield f"event: delta\ndata: {json.dumps({'delta': chunk})}\n\n"
                 except Exception as exc:
@@ -523,11 +559,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         incident = get_incident_or_404(incident_id)
         body = await request.json()
         question = body.get("question", "What is happening?")
+        voice_mode = bool(body.get("voice_mode"))
         if settings.hermes_enabled:
             answer = ""
             adapter_mode = "hermes-api"
             try:
-                result = await hermes.hermes_chat(prompt=question, context=hermes_incident_context(incident))
+                result = await hermes.hermes_chat(prompt=question, context=hermes_incident_context(incident, voice_mode=voice_mode))
                 answer = result.get("content", "")
                 adapter_mode = result.get("mode", "hermes-api")
             except Exception as exc:

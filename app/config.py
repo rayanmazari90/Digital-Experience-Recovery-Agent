@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     retention_days: int = 7
     max_upload_bytes: int = 1_000_000
     allow_sensitive_payloads: bool = False
+    tts_provider: str = "kokoro"
+    tts_kokoro_voice: str = "af_heart"
+    tts_kokoro_lang_code: str = "a"
+    tts_kokoro_speed: float = 1.0
+    tts_sample_rate: int = 24000
+    tts_max_chars: int = 420
 
     model_config = SettingsConfigDict(
         env_prefix="DERA_",

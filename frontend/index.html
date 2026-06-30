@@ -100,7 +100,7 @@
 
         <section id="tab-voice" class="tab-panel">
           <div class="panel-head"><div><span class="eyebrow">Voice Operator Mode</span><h2>Voice lives inside Hermes chat</h2></div><span class="state-chip">No telephony</span></div>
-          <p class="muted-text">The MVP voice UX is a chat bubble, not a separate control room. Use Talk in the Hermes command panel to start microphone input, see a live voice bubble while Hermes writes, mute speech, or stop the conversation and return to text input.</p>
+          <p class="muted-text">The MVP voice UX is a chat bubble, not a separate control room. Use Talk in the Hermes command panel to start microphone input, see a live voice bubble while Hermes writes, mute Hermes audio, turn the mic on/off, or stop the conversation and return to text input.</p>
           <div class="voice-groups">
             <section class="voice-group"><h3>Input</h3><button id="voiceListenBtn" class="btn secondary">Start voice input</button><p class="microcopy">Uses browser microphone permission only. No calls are placed.</p></section>
             <section class="voice-group"><h3>Output</h3><div class="button-row wrap"><button id="speakSituationBtn" class="btn secondary">Speak situation</button><button id="speakDossierBtn" class="btn secondary">Speak dossier</button></div><p class="microcopy">Browser TTS speaks sentence chunks as streaming text arrives; Kokoro-82M is the target local TTS engine for backend streaming voice.</p></section>
@@ -122,7 +122,8 @@
           <form id="chatForm" class="chat-form">
             <input id="chatInput" class="input" placeholder="What is happening?" autocomplete="off" />
             <button id="voiceModeBtn" class="btn secondary" type="button">Talk</button>
-            <button id="muteVoiceBtn" class="btn secondary" type="button" hidden>Mute</button>
+            <button id="micVoiceBtn" class="btn secondary" type="button" hidden>Mic off</button>
+            <button id="muteVoiceBtn" class="btn secondary" type="button" hidden>Mute Hermes</button>
             <button id="stopVoiceBtn" class="btn danger" type="button" hidden>Stop conversation</button>
             <button class="btn primary" type="submit">Ask</button>
           </form>

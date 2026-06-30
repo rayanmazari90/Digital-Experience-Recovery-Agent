@@ -79,7 +79,7 @@ class HermesClient:
         payload = {
             "model": self.settings.hermes_model,
             "messages": [
-                {"role": "system", "content": SUPERVISOR_PROMPT},
+                {"role": "system", "content": f"{SUPERVISOR_PROMPT}\n\nAnswer style: {context.get('answer_style', 'Be concise by default.')}"},
                 {"role": "user", "content": f"Current incident state:\n{context}\n\nOperator question:\n{prompt}"},
             ],
             "metadata": {"dera_chat": True, "context": context},
@@ -108,7 +108,7 @@ class HermesClient:
         payload = {
             "model": self.settings.hermes_model,
             "messages": [
-                {"role": "system", "content": SUPERVISOR_PROMPT},
+                {"role": "system", "content": f"{SUPERVISOR_PROMPT}\n\nAnswer style: {context.get('answer_style', 'Be concise by default.')}"},
                 {"role": "user", "content": f"Current incident state:\n{context}\n\nOperator question:\n{prompt}"},
             ],
             "metadata": {"dera_chat": True, "context": context, "streaming": True},

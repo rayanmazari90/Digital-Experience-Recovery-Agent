@@ -15,8 +15,11 @@ const state = {
   agentWorkTimer: null,
   voiceMode: false,
   voiceMuted: false,
+  micMuted: false,
   voiceSpeaking: false,
   voiceStreamBuffer: '',
+  voiceAudioQueue: Promise.resolve(),
+  kokoroAvailable: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -297,23 +300,60 @@ function setVoiceBubble(title, detail, tone = 'idle') {
 
 function updateVoiceControls() {
   $('voiceModeBtn').hidden = state.voiceMode;
+  $('micVoiceBtn').hidden = !state.voiceMode;
   $('muteVoiceBtn').hidden = !state.voiceMode;
   $('stopVoiceBtn').hidden = !state.voiceMode;
-  $('muteVoiceBtn').textContent = state.voiceMuted ? 'Unmute' : 'Mute';
-  $('chatInput').placeholder = state.voiceMode ? 'Voice mode active — type here anytime as fallback' : 'What is happening?';
+  $('micVoiceBtn').textContent = state.micMuted ? 'Mic on' : 'Mic off';
+  $('muteVoiceBtn').textContent = state.voiceMuted ? 'Unmute Hermes' : 'Mute Hermes';
+  $('chatInput').placeholder = state.voiceMode ? 'Voice mode active — short answers, type anytime as fallback' : 'What is happening?';
   if (!state.voiceMode) $('voiceBubble').hidden = true;
+}
+
+function playAudioBlob(blob) {
+  return new Promise((resolve) => {
+    const audio = new Audio(URL.createObjectURL(blob));
+    audio.onended = () => { URL.revokeObjectURL(audio.src); resolve(); };
+    audio.onerror = () => { URL.revokeObjectURL(audio.src); resolve(); };
+    audio.play().catch(resolve);
+  });
+}
+
+function fallbackBrowserSpeech(chunk, { interrupt = false } = {}) {
+  if (!('speechSynthesis' in window)) return;
+  if (interrupt) window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(chunk);
+  utterance.rate = 0.98;
+  utterance.pitch = 1.0;
+  utterance.onstart = () => { state.voiceSpeaking = true; setVoiceBubble('Hermes is talking', chunk, 'speaking'); };
+  utterance.onend = () => { state.voiceSpeaking = false; if (state.voiceMode) setVoiceBubble('Voice mode listening', 'Ask another question, mute Hermes, or stop conversation to return to text.', 'listening'); };
+  window.speechSynthesis.speak(utterance);
+}
+
+async function speakWithKokoro(chunk) {
+  const response = await fetch(`${apiBase}/api/voice/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: chunk }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  state.kokoroAvailable = true;
+  await playAudioBlob(await response.blob());
 }
 
 function speakLiveChunk(text, { interrupt = false } = {}) {
   const chunk = String(text || '').trim();
-  if (!chunk || !state.voiceMode || state.voiceMuted || !('speechSynthesis' in window)) return;
-  if (interrupt) window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(chunk);
-  utterance.rate = 0.96;
-  utterance.pitch = 1.0;
-  utterance.onstart = () => { state.voiceSpeaking = true; setVoiceBubble('Hermes is talking', chunk, 'speaking'); };
-  utterance.onend = () => { state.voiceSpeaking = false; if (state.voiceMode) setVoiceBubble('Voice mode listening', 'Ask another question, mute, or stop conversation to return to text.', 'listening'); };
-  window.speechSynthesis.speak(utterance);
+  if (!chunk || !state.voiceMode || state.voiceMuted) return;
+  if (interrupt) {
+    state.voiceAudioQueue = Promise.resolve();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }
+  setVoiceBubble('Hermes is talking', chunk, 'speaking');
+  state.voiceAudioQueue = state.voiceAudioQueue
+    .then(() => speakWithKokoro(chunk))
+    .catch(() => {
+      state.kokoroAvailable = false;
+      fallbackBrowserSpeech(chunk, { interrupt });
+    });
 }
 
 function handleVoiceDelta(delta) {
@@ -337,19 +377,21 @@ function flushVoiceBuffer() {
 function startVoiceConversation() {
   state.voiceMode = true;
   state.voiceMuted = false;
+  state.micMuted = false;
   state.voiceStreamBuffer = '';
   updateVoiceControls();
   if (!state.recognition) {
-    setVoiceBubble('Voice input unavailable', 'This browser has no SpeechRecognition. Type in the chat; Hermes can still speak streamed answers if speech synthesis is available.', 'muted');
+    setVoiceBubble('Voice input unavailable', 'This browser has no SpeechRecognition. Type in the chat; Hermes will answer shortly and Kokoro will speak when available.', 'muted');
     return;
   }
-  setVoiceBubble('Voice mode listening', 'Microphone input stays local to the browser. Hermes will speak while writing streamed answers.', 'listening');
+  setVoiceBubble('Voice mode listening', 'Microphone input stays local to the browser. Hermes will answer briefly and Kokoro will speak streamed chunks.', 'listening');
   state.recognition.start();
 }
 
 function stopVoiceConversation() {
   state.voiceMode = false;
   state.voiceStreamBuffer = '';
+  state.voiceAudioQueue = Promise.resolve();
   try { state.recognition?.stop(); } catch (_) { /* ignore inactive recognizer */ }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   updateVoiceControls();
@@ -357,11 +399,23 @@ function stopVoiceConversation() {
   $('chatInput').focus();
 }
 
+function toggleMicMute() {
+  state.micMuted = !state.micMuted;
+  if (state.micMuted) {
+    try { state.recognition?.stop(); } catch (_) { /* ignore inactive recognizer */ }
+    setVoiceBubble('Microphone off', 'Mic is muted. Type instead, or turn Mic on to speak again.', 'muted');
+  } else {
+    setVoiceBubble('Listening', 'Microphone is on. Ask a short question.', 'listening');
+    state.recognition?.start();
+  }
+  updateVoiceControls();
+}
+
 function toggleVoiceMute() {
   state.voiceMuted = !state.voiceMuted;
   if (state.voiceMuted && 'speechSynthesis' in window) window.speechSynthesis.cancel();
   updateVoiceControls();
-  setVoiceBubble(state.voiceMuted ? 'Voice muted' : 'Voice unmuted', state.voiceMuted ? 'Hermes will keep writing, but audio is muted.' : 'Hermes will speak upcoming streamed sentence chunks.', state.voiceMuted ? 'muted' : 'listening');
+  setVoiceBubble(state.voiceMuted ? 'Hermes voice muted' : 'Hermes voice unmuted', state.voiceMuted ? 'Hermes will keep writing, but audio output is muted.' : 'Hermes will speak upcoming streamed sentence chunks through Kokoro when available.', state.voiceMuted ? 'muted' : 'listening');
 }
 
 async function streamHermesMessage(item, question) {
@@ -369,7 +423,7 @@ async function streamHermesMessage(item, question) {
   const response = await fetch(`${apiBase}/api/incidents/${state.incident.id}/ask/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, voice_mode: state.voiceMode }),
   });
   if (!response.ok || !response.body) throw new Error(`${response.status} ${response.statusText}: ${await response.text()}`);
   const reader = response.body.getReader();
@@ -794,7 +848,7 @@ async function askHermes(question) {
     state.streamPhase = 'stream_error';
     updateHermesProgress(pending, 'Streaming failed. Trying non-streaming Hermes response...');
     try {
-      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', body: JSON.stringify({ question }) });
+      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', body: JSON.stringify({ question, voice_mode: state.voiceMode }) });
       await typeHermesMessage(pending, result.answer, result.adapter_mode);
     } catch (error) {
       await typeHermesMessage(pending, `I could not answer from the backend: ${error.message || streamError.message}`, 'hermes-unavailable');
@@ -865,6 +919,7 @@ function bind() {
   $('approveBtn').addEventListener('click', () => recordApproval('approved_local'));
   $('rejectBtn').addEventListener('click', () => recordApproval('rejected_local'));
   $('voiceModeBtn').addEventListener('click', startVoiceConversation);
+  $('micVoiceBtn').addEventListener('click', toggleMicMute);
   $('muteVoiceBtn').addEventListener('click', toggleVoiceMute);
   $('stopVoiceBtn').addEventListener('click', stopVoiceConversation);
   $('voiceListenBtn').addEventListener('click', startVoiceConversation);

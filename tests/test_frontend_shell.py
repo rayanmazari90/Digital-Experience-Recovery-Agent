@@ -23,7 +23,8 @@ def test_frontend_shell_contains_interactive_incident_command_regions():
         "Voice Operator Mode",
         "Voice lives inside Hermes chat",
         "voiceBubble",
-        "Mute",
+        "Mic off",
+        "Mute Hermes",
         "Stop conversation",
         "Uses browser microphone permission only. No calls are placed.",
         "Raw evidence",
@@ -77,6 +78,8 @@ def test_voice_operator_demo_features_are_labeled_and_bounded():
     js = (FRONTEND / "app.js").read_text()
     assert "Voice lives inside Hermes chat" in html
     assert "voiceBubble" in html
+    assert "Mic off" in html
+    assert "Mute Hermes" in html
     assert "Stop conversation" in html
     assert "Kokoro-82M" in html
     assert "Simulate caller question" in html
@@ -84,10 +87,14 @@ def test_voice_operator_demo_features_are_labeled_and_bounded():
     assert "speechSynthesis" in js
     assert "startVoiceConversation" in js
     assert "stopVoiceConversation" in js
+    assert "toggleMicMute" in js
     assert "toggleVoiceMute" in js
+    assert "speakWithKokoro" in js
+    assert "/api/voice/tts" in js
+    assert "voice_mode: state.voiceMode" in js
     assert "handleVoiceDelta" in js
     assert "flushVoiceBuffer" in js
-    assert "Hermes will speak while writing streamed answers" in js
+    assert "Hermes will answer briefly and Kokoro will speak streamed chunks" in js
     assert "addHermesWritingMessage" in js
     assert "hermes-progress" in js
     assert "streamPhase" in js
