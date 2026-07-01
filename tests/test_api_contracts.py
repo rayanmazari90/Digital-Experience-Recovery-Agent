@@ -135,7 +135,7 @@ def test_incident_command_product_contract(client):
 
     asked = client.post(f"/api/incidents/{incident['id']}/ask", json={"question": "Why do you suspect CHG-1048?"})
     assert asked.status_code == 200
-    assert "Hermes is not reachable" in asked.json()["answer"]
+    assert "DERA is reconnecting" in asked.json()["answer"]
 
     streamed = client.post(f"/api/incidents/{incident['id']}/ask/stream", json={"question": "What is happening?", "voice_mode": True})
     assert streamed.status_code == 200
@@ -143,11 +143,12 @@ def test_incident_command_product_contract(client):
     assert "event: status" in streamed.text
     assert "event: delta" in streamed.text
     assert "event: done" in streamed.text
-    assert "Hermes is not reachable right now" in streamed.text
+    assert "DERA is reconnecting" in streamed.text
 
     voice_status = client.get("/api/voice/status")
     assert voice_status.status_code == 200
     assert voice_status.json()["model"] == "Kokoro-82M"
+    assert voice_status.json()["speed"] == 1.22
     tts_missing = client.post("/api/voice/tts", json={"text": "Short test."})
     assert tts_missing.status_code in {200, 503}
 

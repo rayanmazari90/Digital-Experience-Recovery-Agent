@@ -13,18 +13,18 @@ def test_frontend_shell_contains_interactive_incident_command_regions():
         "stageTracker",
         "activeWorkstream",
         "agentDrawer",
-        "Hermes command",
+        "DERA command",
         "Expand chat",
         "Sub-agent operations",
         "Evidence canvas",
         "Recovery dossier",
-        "Approve local synthetic recovery",
-        "Ask Hermes to revise dossier",
+        "Approve local recovery",
+        "Ask DERA to revise dossier",
         "Voice Operator Mode",
-        "Voice lives inside Hermes chat",
+        "Voice lives inside the DERA command rail",
         "voiceBubble",
         "Mic off",
-        "Mute Hermes",
+        "Mute DERA",
         "Stop conversation",
         "Uses browser microphone permission only. No calls are placed.",
         "Raw evidence",
@@ -70,18 +70,18 @@ def test_accessibility_and_operational_language_contracts():
     assert "aria-label" in html
     assert "landing" not in html.lower()
     assert "slide" not in html.lower()
-    assert "console-grid" in css
-    assert "@media(max-width:1100px)" in css
+    assert "cockpit-grid" in css
+    assert "@media (max-width: 1200px)" in css
     assert "[hidden]" in css
 
 
 def test_voice_operator_demo_features_are_labeled_and_bounded():
     html = (FRONTEND / "index.html").read_text()
     js = (FRONTEND / "app.js").read_text()
-    assert "Voice lives inside Hermes chat" in html
+    assert "Voice lives inside the DERA command rail" in html
     assert "voiceBubble" in html
     assert "Mic off" in html
-    assert "Mute Hermes" in html
+    assert "Mute DERA" in html
     assert "Stop conversation" in html
     assert "Kokoro-82M" in html
     assert "Simulate caller question" in html
@@ -92,11 +92,14 @@ def test_voice_operator_demo_features_are_labeled_and_bounded():
     assert "toggleMicMute" in js
     assert "toggleVoiceMute" in js
     assert "speakWithKokoro" in js
+    assert "primeAudioPlayback" in js
+    assert "audio.play().then" in js
+    assert "utterance.rate = 1.12" in js
     assert "/api/voice/tts" in js
     assert "voice_mode: state.voiceMode" in js
     assert "handleVoiceDelta" in js
     assert "flushVoiceBuffer" in js
-    assert "Hermes will answer briefly and Kokoro will speak streamed chunks" in js
+    assert "DERA will answer briefly and Kokoro will speak streamed chunks" in js
     assert "addHermesWritingMessage" in js
     assert "hermes-progress" in js
     assert "streamPhase" in js
@@ -108,6 +111,12 @@ def test_voice_operator_demo_features_are_labeled_and_bounded():
     assert "chatQuestionFromInput" in js
     assert "askHermes(chatQuestionFromInput())" in js
     assert "showChatInputHint" in js
+    assert "routeDashboardCommand" in js
+    assert "technical timeline|why|what|how|explain|summarize|list|compare" in js
+    assert "dashboardContextForChat" in js
+    assert "dashboard_context" in js
+    assert "applyQuestionPlacement" in js
+    assert "renderAgentFlowGraph" in js
     assert "return $('chatInput').value.trim()" in js
     assert "if (!cleanQuestion)" in js
     assert "openAgentDrawer" in js
@@ -115,3 +124,4 @@ def test_voice_operator_demo_features_are_labeled_and_bounded():
     assert "Visible reasoning summary" in js
     assert "I cannot receive my MFA code. Is my card still working?" in js
     assert "no telephony connected" in js.lower()
+    assert "synthetic" not in html.lower()

@@ -36,7 +36,7 @@
 
     <div class="status-strip" aria-label="Runtime status">
       <span id="backendStatus" class="pill muted">Backend checking</span>
-      <span id="hermesStatus" class="pill muted">Hermes checking</span>
+      <span id="hermesStatus" class="pill muted">DERA checking</span>
       <span class="pill safe">Demo safe mode</span>
       <span id="severityStatus" class="pill danger">SEV-2</span>
     </div>
@@ -111,8 +111,8 @@
 
         <article class="glass-panel focus-card">
           <span class="eyebrow">Operator focus</span>
-          <h2 id="operatorFocus">Start with Hermes</h2>
-          <p id="operatorGuidance" class="panel-summary">Ask Hermes to investigate, then follow the timeline, evidence, agents, and dossier tabs as the case develops.</p>
+          <h2 id="operatorFocus">Start with DERA</h2>
+          <p id="operatorGuidance" class="panel-summary">Ask DERA to investigate, then follow the timeline, evidence, agents, and dossier tabs as the case develops.</p>
         </article>
 
       </aside>
@@ -154,7 +154,7 @@
               <span class="eyebrow">Chronology</span>
               <h2>Incident handling timeline</h2>
             </div>
-            <button id="technicalTimelineBtn" class="btn secondary">Ask Hermes for technical timeline</button>
+            <button id="technicalTimelineBtn" class="btn secondary">Ask DERA for technical timeline</button>
           </div>
           <div id="timelineRail" class="timeline-rail"></div>
         </section>
@@ -175,7 +175,7 @@
           <div class="panel-head">
             <div>
               <span class="eyebrow">Sub-agent operations</span>
-              <h2>Hermes specialist workstream</h2>
+              <h2>DERA specialist workstream</h2>
             </div>
           </div>
           <div id="agentList" class="agent-list"></div>
@@ -186,7 +186,7 @@
           <div class="panel-head">
             <div>
               <span class="eyebrow">Recovery dossier</span>
-              <h2 id="dossierStatus">Waiting for Hermes to build the case</h2>
+              <h2 id="dossierStatus">Waiting for DERA to build the case</h2>
             </div>
             <span id="confidenceChip" class="pill muted">Confidence pending</span>
           </div>
@@ -200,12 +200,12 @@
               <option value="risks">Risk explanation</option>
             </select>
             <input id="revisionInstruction" class="input" placeholder="Revision instruction, e.g. make this calmer for customers" />
-            <button id="reviseBtn" class="btn secondary">Ask Hermes to revise dossier</button>
+            <button id="reviseBtn" class="btn secondary">Ask DERA to revise dossier</button>
           </div>
           <div id="approvalGate" class="approval-gate" hidden>
-            <p><strong>Local synthetic recovery gate.</strong> Approval records a local safe-demo decision only. No rollback, customer message, telephony, or bank system is touched.</p>
+            <p><strong>Local recovery gate.</strong> Approval records a local supervised decision only. No rollback, customer message, telephony, or bank system is touched.</p>
             <div class="button-row">
-              <button id="approveBtn" class="btn primary">Approve synthetic recovery</button>
+              <button id="approveBtn" class="btn primary">Approve local recovery</button>
               <button id="rejectBtn" class="btn danger">Reject recommendation</button>
             </div>
           </div>
@@ -216,11 +216,11 @@
           <div class="panel-head">
             <div>
               <span class="eyebrow">Voice Operator Mode</span>
-              <h2>Hermes voice interface</h2>
+              <h2>DERA voice interface</h2>
             </div>
             <span class="state-chip">No telephony</span>
           </div>
-          <p class="muted-text">The voice UX is integrated in the Hermes command panel. Press Talk to open the voice overlay, see Hermes writing live, mute audio, or stop the conversation.</p>
+          <p class="muted-text">Voice lives inside the DERA command rail. Press Talk to open the voice overlay, see DERA writing live, mute audio, or stop the conversation.</p>
           <div class="voice-groups">
             <section class="voice-group">
               <h3>Input</h3>
@@ -238,7 +238,7 @@
             <section class="voice-group">
               <h3>Simulation</h3>
               <button id="simulateCallerBtn" class="btn secondary">Simulate caller question</button>
-              <p class="microcopy">Synthetic caller prompt. Not connected to telephony or customer records.</p>
+              <p class="microcopy">Practice caller prompt. Not connected to telephony or customer records.</p>
             </section>
           </div>
           <p id="voiceStatus" class="muted-text voice-status-indicator">Voice bridge idle. Text chat is always available.</p>
@@ -246,7 +246,7 @@
 
       </section>
 
-      <!-- ── RIGHT RAIL: HERMES CHAT ── -->
+      <!-- ── RIGHT RAIL: DERA CHAT ── -->
       <aside class="right-rail">
         <section class="glass-panel chat-panel">
 
@@ -254,7 +254,7 @@
           <div class="voice-pod" id="voicePod" data-voice-state="idle">
             <canvas id="spheronCanvas" class="spheron-canvas-chat"></canvas>
             <div class="voice-pod-info">
-              <strong id="voiceBubbleTitle">Hermes</strong>
+              <strong id="voiceBubbleTitle">DERA</strong>
               <p id="voiceBubbleText">Ask by voice or type below</p>
               <!-- Controls appear when voice mode is active -->
               <div class="voice-pod-controls">
@@ -264,29 +264,29 @@
                 </button>
                 <button id="muteVoiceBtn" class="btn secondary compact" type="button" hidden>
                   <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M2 10l4-3v6l4-5v8l4-4v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  Mute
+                  Mute DERA
                 </button>
                 <button id="stopVoiceBtn" class="btn danger compact" type="button" hidden>
                   <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor"/></svg>
-                  Stop
+                  Stop conversation
                 </button>
               </div>
             </div>
           </div>
 
           <div class="panel-head chat-panel-head">
-            <span class="eyebrow">Hermes command</span>
-            <button id="expandChatBtn" class="btn secondary compact" type="button" aria-pressed="false">Expand</button>
+            <span class="eyebrow">DERA command</span>
+            <button id="expandChatBtn" class="btn secondary compact" type="button" aria-pressed="false">Expand chat</button>
           </div>
 
           <div id="suggestedPrompts" class="prompt-list"></div>
-          <div id="chatHint" class="chat-hint" hidden>Type a question or click a suggested prompt above.</div>
+          <div id="chatHint" class="chat-hint" hidden>Type a question, or click one of the suggested prompt chips above.</div>
           <div id="chatLog" class="chat-log" aria-live="polite"></div>
 
           <form id="chatForm" class="chat-form">
             <input id="chatInput" class="input chat-input" placeholder="What is happening?" autocomplete="off" />
             <div class="chat-form-btns">
-              <button id="voiceModeBtn" class="btn voice-pill" type="button" title="Talk to Hermes">
+              <button id="voiceModeBtn" class="btn voice-pill" type="button" title="Talk to DERA">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="5" y="1" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M2 9c0 3.314 2.686 5 6 5s6-1.686 6-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8 14v1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
                 Talk
               </button>
@@ -307,7 +307,7 @@
 
   <!-- ════════════════════════════════════ ADVANCED RAW ════ -->
   <details class="advanced-drawer">
-    <summary>Raw event stream</summary>
+    <summary>Advanced raw streams</summary>
     <pre id="rawState">No runtime events yet.</pre>
   </details>
 

@@ -88,6 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "model": "Kokoro-82M" if settings.tts_provider == "kokoro" else settings.tts_provider,
             "available": available,
             "voice": settings.tts_kokoro_voice,
+            "speed": settings.tts_kokoro_speed,
             "streaming_strategy": "sentence-chunk",
             "error": None if available else tts.last_error,
         }
@@ -391,7 +392,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {"id": "ev_recovery_plan", "lane": "recovery", "title": "Recovery plan", "summary": "Rollback stable-v4.12.2, validate MFA, publish customer-safe message", "details": {"rollback_target": "stable-v4.12.2", "checks": ["MFA code delivery latency < 500ms", "504 rate returns below 0.5%", "Login completion returns to baseline"], "residual_risk": "Monitor delayed SMS backlog for 20 minutes."}, "visible_after": "investigating.recovery_planning"},
         ]
         subagents = [
-            {"id": "supervisor", "name": "Digital Experience Supervisor", "status": "running", "task": "Coordinate incident investigation and safety gate", "tool": "Hermes incident orchestration", "finding": "Incident opened: login authentication degradation", "confidence": 0.86, "timestamp": "09:51", "evidence_id": "ev_customer_complaints"},
+            {"id": "supervisor", "name": "Digital Experience Supervisor", "status": "running", "task": "Coordinate incident investigation and safety gate", "tool": "DERA incident orchestration", "finding": "Incident opened: login authentication degradation", "confidence": 0.86, "timestamp": "09:51", "evidence_id": "ev_customer_complaints"},
             {"id": "customer_signal", "name": "Customer Signal Agent", "status": "queued", "task": "Cluster customer complaints across app/chat/contact-center samples", "tool": "complaint_cluster.sample", "finding": "Waiting for investigation", "confidence": None, "timestamp": "09:51", "evidence_id": "ev_customer_complaints"},
             {"id": "observability", "name": "Observability Agent", "status": "queued", "task": "Check auth gateway latency and 504 errors", "tool": "observability.query.sample", "finding": "Waiting for customer signal", "confidence": None, "timestamp": "09:52", "evidence_id": "ev_telemetry_latency"},
             {"id": "change_correlation", "name": "Change Correlation Agent", "status": "queued", "task": "Compare failure window with recent changes", "tool": "change_record.lookup.sample", "finding": "Waiting for telemetry", "confidence": None, "timestamp": "09:53", "evidence_id": "ev_change_chg1048"},
@@ -453,25 +454,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def unavailable_hermes_answer(question: str, incident: dict[str, Any]) -> str:
         return (
-            "Hermes is not reachable right now, so I won’t fake a live answer. "
-            "The synthetic incident is loaded locally; live reasoning needs the Hermes API server."
+            "DERA is reconnecting to the live reasoning runtime right now, so I won’t invent an answer. "
+            "The incident workspace is loaded locally; live analysis needs the DERA runtime online."
         )
 
-    def hermes_incident_context(incident: dict[str, Any], *, voice_mode: bool = False) -> dict[str, Any]:
+    def hermes_incident_context(incident: dict[str, Any], *, voice_mode: bool = False, dashboard_context: dict[str, Any] | None = None) -> dict[str, Any]:
         answer_style = (
-            "Voice conversation mode: answer like a calm human incident copilot. Use 1-3 short sentences, under 45 words, no long lists unless explicitly requested."
+            "Voice conversation mode: you are DERA, an expert digital-experience recovery lead speaking to an operator. Sound warm, human, energetic, and focused; confident but never theatrical. Use natural conversational phrasing, contractions, and short pauses. Keep it to 1-2 short sentences under 38 words. Avoid markdown, long lists, robotic labels, raw IDs, or the safety-boundary label unless the operator explicitly asks about safety boundaries."
             if voice_mode
             else "Default chat mode: be concise by default. Use 2-4 short bullets or a short paragraph; give long explanations only when the operator asks for detail."
         )
         return {
-            "product_role": "You are Hermes, the live Digital Experience Recovery Agent inside the Apex Global Bank cockpit.",
-            "instruction": "Answer as the actual Hermes agent. Reason over the provided sample incident state. Do not claim real bank-system access. Make it clear that approvals are local synthetic recovery decisions only.",
+            "product_role": "You are DERA, the live Digital Experience Recovery Agent inside the Apex Global Bank cockpit.",
+            "instruction": "Answer as DERA: an expert in digital experience recovery, incident diagnosis, customer-impact reasoning, and safe recovery coordination. Reason over the provided sample incident state and the live dashboard context. Know which workspace tab the operator is currently viewing, what evidence is visible, which agent is active, and what the next CTA is. If the question belongs in a different workspace, say where you moved/focused the operator and answer using that placement. Do not claim real bank-system access. Keep approvals clearly local and supervised.",
             "answer_style": answer_style,
             "state": incident["state"],
             "incident": incident["title"],
             "severity": incident["severity"],
             "impact": incident["impact"],
             "visible_evidence": visible_evidence(incident),
+            "dashboard_context": dashboard_context or {},
             "subagents": incident["subagents"],
             "dossier": incident["dossier"],
         }
@@ -507,12 +509,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                     if result.get("content"):
                         agent["finding"] = result["content"][:900]
-                        agent["tool"] = "live Hermes specialist reasoning"
+                        agent["tool"] = "live DERA specialist reasoning"
                         agent["status"] = "complete"
                         incident_event(incident, "hermes.subagent.live", {"agent": agent_id, "mode": result.get("mode", "hermes-api")})
                 except Exception as exc:
                     agent["status"] = "blocked"
-                    agent["finding"] = "Live Hermes specialist reasoning is unavailable; no fake specialist finding was substituted."
+                    agent["finding"] = "Live DERA specialist reasoning is unavailable; no invented specialist finding was substituted."
                     incident_event(incident, "hermes.subagent.unavailable", {"agent": agent_id, "message": str(exc)})
         audit_event(db, action="investigate_incident", resource_type="incident", resource_id=incident_id, request=request, metadata={"state": incident["state"], "hermes_enabled": settings.hermes_enabled})
         return incident
@@ -523,14 +525,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = await request.json()
         question = body.get("question", "What is happening?")
         voice_mode = bool(body.get("voice_mode"))
+        dashboard_context = body.get("dashboard_context") if isinstance(body.get("dashboard_context"), dict) else {}
 
         async def event_generator():
             answer_parts: list[str] = []
             adapter_mode = "hermes-api" if settings.hermes_enabled else "hermes-disabled"
-            yield f"event: status\ndata: {json.dumps({'adapter_mode': adapter_mode, 'message': 'Hermes is writing'})}\n\n"
+            yield f"event: status\ndata: {json.dumps({'adapter_mode': adapter_mode, 'message': 'DERA is writing'})}\n\n"
             if settings.hermes_enabled:
                 try:
-                    async for chunk in hermes.hermes_chat_stream(prompt=question, context=hermes_incident_context(incident, voice_mode=voice_mode)):
+                    async for chunk in hermes.hermes_chat_stream(prompt=question, context=hermes_incident_context(incident, voice_mode=voice_mode, dashboard_context=dashboard_context)):
                         answer_parts.append(chunk)
                         yield f"event: delta\ndata: {json.dumps({'delta': chunk})}\n\n"
                 except Exception as exc:
@@ -560,11 +563,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = await request.json()
         question = body.get("question", "What is happening?")
         voice_mode = bool(body.get("voice_mode"))
+        dashboard_context = body.get("dashboard_context") if isinstance(body.get("dashboard_context"), dict) else {}
         if settings.hermes_enabled:
             answer = ""
             adapter_mode = "hermes-api"
             try:
-                result = await hermes.hermes_chat(prompt=question, context=hermes_incident_context(incident, voice_mode=voice_mode))
+                result = await hermes.hermes_chat(prompt=question, context=hermes_incident_context(incident, voice_mode=voice_mode, dashboard_context=dashboard_context))
                 answer = result.get("content", "")
                 adapter_mode = result.get("mode", "hermes-api")
             except Exception as exc:
@@ -617,7 +621,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 adapter_mode = "hermes-unavailable"
                 incident_event(incident, "dossier.revision.unavailable", {"field": field, "message": str(exc)})
         else:
-            revised = f"{original} Hermes is disabled, so no live rewrite was performed. Operator request was: {instruction}"
+            revised = f"{original} DERA live reasoning is disabled, so no live rewrite was performed. Operator request was: {instruction}"
         incident["dossier"][field] = revised
         incident["dossier"]["revision_count"] += 1
         incident["dossier"]["status"] = "revised" if adapter_mode == "hermes-api" else "revision_needs_hermes"

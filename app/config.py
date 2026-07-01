@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     tts_provider: str = "kokoro"
     tts_kokoro_voice: str = "af_heart"
     tts_kokoro_lang_code: str = "a"
-    tts_kokoro_speed: float = 1.0
+    tts_kokoro_speed: float = 1.22
     tts_sample_rate: int = 24000
     tts_max_chars: int = 420
 

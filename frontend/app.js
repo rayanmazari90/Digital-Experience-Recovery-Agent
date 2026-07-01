@@ -19,6 +19,8 @@ const state = {
   voiceSpeaking: false,
   voiceStreamBuffer: '',
   voiceAudioQueue: Promise.resolve(),
+  audioContext: null,
+  audioUnlocked: false,
   kokoroAvailable: null,
 };
 
@@ -49,15 +51,15 @@ const STATE_ORDER = [
 const PRODUCT_STATES = {
   disconnected: {
     label: 'Disconnected',
-    focus: ['Connection required', 'Start the backend and Hermes API server before investigating.'],
+    focus: ['Connection required', 'Start the backend and DERA runtime before investigating.'],
     cta: { label: 'Backend required', action: 'none', enabled: false, reason: 'Waiting for backend connection.' },
     prompts: ['What is the connection status?'],
   },
   ready_with_incident: {
     label: 'Ready for investigation',
-    focus: ['Start with Hermes', 'Start the investigation, then inspect the evidence and specialist workstream as the case develops.'],
+    focus: ['Start with DERA', 'Start the investigation, then inspect the evidence and specialist workstream as the case develops.'],
     cta: { label: 'Start investigation', action: 'advance', enabled: true, reason: null },
-    prompts: ['What is happening?', 'What evidence will Hermes inspect?', 'What remains operational?'],
+    prompts: ['What is happening?', 'What evidence will DERA inspect?', 'What remains operational?'],
   },
   'investigating.customer_signal': {
     label: 'Customer signal active',
@@ -79,38 +81,38 @@ const PRODUCT_STATES = {
   },
   'investigating.recovery_planning': {
     label: 'Recovery planning active',
-    focus: ['Review recovery wording', 'Hermes has enough evidence to build a local safe-mode dossier and approval gate.'],
+    focus: ['Review recovery wording', 'DERA has enough evidence to build a local safe-mode dossier and approval gate.'],
     cta: { label: 'Build dossier', action: 'advance', enabled: true, reason: null },
     prompts: ['Draft a customer-safe message.', 'What validation checks matter?', 'What should I approve?'],
   },
   dossier_ready: {
     label: 'Dossier ready',
-    focus: ['Open the human gate', 'The recovery dossier is ready. Continue to the local synthetic approval gate.'],
+    focus: ['Open the human gate', 'The recovery dossier is ready. Continue to the supervised approval gate.'],
     cta: { label: 'Open approval gate', action: 'advance', enabled: true, reason: null },
     prompts: ['Summarize the dossier.', 'List unresolved risks.', 'What should I approve?'],
   },
   revising_dossier: {
     label: 'Revising dossier',
-    focus: ['Hermes is revising', 'A live Hermes dossier revision is in progress. Keep review local and approval-gated.'],
-    cta: { label: 'Revision in progress', action: 'none', enabled: false, reason: 'Waiting for Hermes to revise the dossier.' },
+    focus: ['DERA is revising', 'A live DERA dossier revision is in progress. Keep review local and approval-gated.'],
+    cta: { label: 'Revision in progress', action: 'none', enabled: false, reason: 'Waiting for DERA to revise the dossier.' },
     prompts: ['What changed in the revision?', 'List unresolved risks.'],
   },
   approval_required: {
     label: 'Approval required',
-    focus: ['Human gate', 'Approve or reject the local synthetic recovery decision only after reviewing the dossier.'],
+    focus: ['Human gate', 'Approve or reject the local recovery decision only after reviewing the dossier.'],
     cta: { label: 'Review local approval gate', action: 'show_dossier', enabled: true, reason: null },
     prompts: ['What should I approve?', 'Revise the customer message.', 'Why is this safe-mode only?'],
   },
   approved_local: {
     label: 'Approved locally',
-    focus: ['Local decision recorded', 'Synthetic approval was recorded. No real customer, rollback, or banking system action occurred.'],
-    cta: { label: 'Approved locally', action: 'none', enabled: false, reason: 'Synthetic approval already recorded.' },
+    focus: ['Local decision recorded', 'Local approval was recorded. No real customer, rollback, or banking system action occurred.'],
+    cta: { label: 'Approved locally', action: 'none', enabled: false, reason: 'Local approval already recorded.' },
     prompts: ['Summarize the final decision.', 'What should be monitored next?'],
   },
   rejected_local: {
     label: 'Rejected locally',
-    focus: ['Recommendation rejected', 'Synthetic rejection was recorded. No real customer, rollback, or banking system action occurred.'],
-    cta: { label: 'Rejected locally', action: 'none', enabled: false, reason: 'Synthetic rejection already recorded.' },
+    focus: ['Recommendation rejected', 'Local rejection was recorded. No real customer, rollback, or banking system action occurred.'],
+    cta: { label: 'Rejected locally', action: 'none', enabled: false, reason: 'Local rejection already recorded.' },
     prompts: ['Explain the rejection record.', 'What alternative should we consider?'],
   },
   error: {
@@ -124,7 +126,7 @@ const PRODUCT_STATES = {
 const EVIDENCE_EXPLAINERS = {
   ev_customer_complaints: {
     supports: ['Customer-facing Login / Authentication impact', 'MFA code non-arrival symptom cluster', 'SEV-2 impact plausibility'],
-    limitations: ['Does not prove the backend failure mode alone', 'Samples are masked synthetic evidence'],
+    limitations: ['Does not prove the backend failure mode alone', 'Samples are masked practice evidence'],
   },
   ev_telemetry_latency: {
     supports: ['Auth gateway latency spike', '504 timeout behavior matching login failures'],
@@ -157,7 +159,7 @@ const AGENT_WORK_SCRIPTS = {
     'Linking complaint evidence to Login / Authentication journey',
   ],
   observability: [
-    'Reading synthetic auth gateway latency',
+    'Reading auth gateway latency',
     'Checking 504 error-rate movement',
     'Comparing login completion and MFA validation symptoms',
     'Preparing telemetry confidence summary',
@@ -177,14 +179,14 @@ const AGENT_WORK_SCRIPTS = {
   supervisor: [
     'Reconciling specialist findings',
     'Checking evidence IDs and uncertainty',
-    'Preparing local synthetic approval gate',
+    'Preparing supervised approval gate',
     'Building replayable dossier summary',
   ],
 };
 
 const AGENT_REASONING_SUMMARIES = {
   customer_signal: 'Visible reasoning summary: compare masked complaint phrases against the affected journey, quantify impact, and avoid claiming a technical cause from customer text alone.',
-  observability: 'Visible reasoning summary: check whether synthetic telemetry explains the login symptoms before accepting the customer-signal hypothesis as technical.',
+  observability: 'Visible reasoning summary: check whether telemetry explains the login symptoms before accepting the customer-signal hypothesis as technical.',
   change_correlation: 'Visible reasoning summary: compare CHG-1048 timing and service scope with the incident window while preserving uncertainty about correlation versus proof.',
   recovery: 'Visible reasoning summary: produce a non-executing recovery option, validation checklist, and customer-safe wording that remains behind local approval.',
   supervisor: 'Visible reasoning summary: reconcile specialist outputs, evidence IDs, confidence, and approval policy into a replayable operator decision.',
@@ -209,13 +211,13 @@ function setRuntimeStatus(health) {
   state.hermesConnected = Boolean(health.hermes_enabled);
   $('backendStatus').textContent = 'Backend connected';
   $('backendStatus').className = 'pill good';
-  $('hermesStatus').textContent = state.hermesConnected ? 'Hermes connected' : 'Hermes adapter ready';
+  $('hermesStatus').textContent = state.hermesConnected ? 'DERA connected' : 'DERA adapter ready';
   $('hermesStatus').className = state.hermesConnected ? 'pill good' : 'pill warn';
 }
 
 function adapterLabel(adapterMode) {
-  if (adapterMode === 'hermes-api') return 'Live Hermes';
-  if (adapterMode) return 'Hermes unavailable';
+  if (adapterMode === 'hermes-api') return 'Live DERA';
+  if (adapterMode) return 'DERA unavailable';
   return '';
 }
 
@@ -240,7 +242,7 @@ function addChat(role, content, adapterMode = '') {
   const item = document.createElement('div');
   item.className = `chat-message ${role}`;
   const liveLabel = role === 'hermes' && adapterMode ? `<em>${adapterLabel(adapterMode)}</em>` : '';
-  item.innerHTML = `<strong>${role === 'operator' ? 'You' : 'Hermes'} ${liveLabel}</strong><div class="message-body">${role === 'hermes' ? formatHermesContent(content) : `<p>${escapeHtml(content)}</p>`}</div>`;
+  item.innerHTML = `<strong>${role === 'operator' ? 'You' : 'DERA'} ${liveLabel}</strong><div class="message-body">${role === 'hermes' ? formatHermesContent(content) : `<p>${escapeHtml(content)}</p>`}</div>`;
   $('chatLog').appendChild(item);
   $('chatLog').scrollTop = $('chatLog').scrollHeight;
   return item;
@@ -251,7 +253,7 @@ function addHermesWritingMessage(phase = 'Opening incident context...') {
   const item = document.createElement('div');
   item.className = 'chat-message hermes typing';
   item.dataset.firstDelta = 'false';
-  item.innerHTML = `<strong>Hermes <em>Live Hermes</em></strong><div class="message-body"><div class="hermes-progress"><span class="pulse-dot"></span><span data-progress-text>${escapeHtml(phase)}</span></div></div>`;
+  item.innerHTML = `<strong>DERA <em>Live DERA</em></strong><div class="message-body"><div class="hermes-progress"><span class="pulse-dot"></span><span data-progress-text>${escapeHtml(phase)}</span></div></div>`;
   $('chatLog').appendChild(item);
   $('chatLog').scrollTop = $('chatLog').scrollHeight;
   return item;
@@ -266,7 +268,7 @@ function ensureStreamTarget(item, adapterMode = 'hermes-api') {
   if (item.dataset.firstDelta !== 'true') {
     item.dataset.firstDelta = 'true';
     item.className = 'chat-message hermes';
-    item.innerHTML = `<strong>Hermes <em>${adapterLabel(adapterMode)}</em></strong><div class="message-body"><p></p></div>`;
+    item.innerHTML = `<strong>DERA <em>${adapterLabel(adapterMode)}</em></strong><div class="message-body"><p></p></div>`;
   }
   return item.querySelector('.message-body p');
 }
@@ -274,7 +276,7 @@ function ensureStreamTarget(item, adapterMode = 'hermes-api') {
 async function typeHermesMessage(item, content, adapterMode = '') {
   item.className = 'chat-message hermes';
   item.dataset.firstDelta = 'true';
-  item.innerHTML = `<strong>Hermes <em>${adapterLabel(adapterMode)}</em></strong><div class="message-body"><p></p></div>`;
+  item.innerHTML = `<strong>DERA <em>${adapterLabel(adapterMode)}</em></strong><div class="message-body"><p></p></div>`;
   const target = item.querySelector('p');
   const text = String(content || '');
   const chunkSize = text.length > 900 ? 18 : 9;
@@ -304,17 +306,40 @@ function updateVoiceControls() {
   $('muteVoiceBtn').hidden = !state.voiceMode;
   $('stopVoiceBtn').hidden = !state.voiceMode;
   $('micVoiceBtn').textContent = state.micMuted ? 'Mic on' : 'Mic off';
-  $('muteVoiceBtn').textContent = state.voiceMuted ? 'Unmute Hermes' : 'Mute Hermes';
+  $('muteVoiceBtn').textContent = state.voiceMuted ? 'Unmute DERA' : 'Mute DERA';
   $('chatInput').placeholder = state.voiceMode ? 'Voice mode active — short answers, type anytime as fallback' : 'What is happening?';
   if (!state.voiceMode) $('voiceBubble').hidden = true;
 }
 
+async function primeAudioPlayback() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      state.audioContext = state.audioContext || new AudioContextClass();
+      if (state.audioContext.state === 'suspended') await state.audioContext.resume();
+      const source = state.audioContext.createBufferSource();
+      source.buffer = state.audioContext.createBuffer(1, 1, 22050);
+      source.connect(state.audioContext.destination);
+      source.start(0);
+    }
+    state.audioUnlocked = true;
+    return true;
+  } catch (error) {
+    state.audioUnlocked = false;
+    setVoiceBubble('Tap to enable sound', 'Safari blocked audio playback. Press Talk again, then ask DERA.', 'muted');
+    return false;
+  }
+}
+
 function playAudioBlob(blob) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const audio = new Audio(URL.createObjectURL(blob));
-    audio.onended = () => { URL.revokeObjectURL(audio.src); resolve(); };
-    audio.onerror = () => { URL.revokeObjectURL(audio.src); resolve(); };
-    audio.play().catch(resolve);
+    const cleanup = () => URL.revokeObjectURL(audio.src);
+    audio.onended = () => { cleanup(); resolve(); };
+    audio.onerror = () => { cleanup(); reject(new Error('audio_playback_failed')); };
+    audio.play().then(() => {
+      state.audioUnlocked = true;
+    }).catch((error) => { cleanup(); reject(error); });
   });
 }
 
@@ -322,10 +347,10 @@ function fallbackBrowserSpeech(chunk, { interrupt = false } = {}) {
   if (!('speechSynthesis' in window)) return;
   if (interrupt) window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(chunk);
-  utterance.rate = 0.98;
-  utterance.pitch = 1.0;
-  utterance.onstart = () => { state.voiceSpeaking = true; setVoiceBubble('Hermes is talking', chunk, 'speaking'); };
-  utterance.onend = () => { state.voiceSpeaking = false; if (state.voiceMode) setVoiceBubble('Voice mode listening', 'Ask another question, mute Hermes, or stop conversation to return to text.', 'listening'); };
+  utterance.rate = 1.12;
+  utterance.pitch = 1.02;
+  utterance.onstart = () => { state.voiceSpeaking = true; setVoiceBubble('DERA is talking', chunk, 'speaking'); };
+  utterance.onend = () => { state.voiceSpeaking = false; if (state.voiceMode) setVoiceBubble('Voice mode listening', 'Ask another question, mute DERA, or stop conversation to return to text.', 'listening'); };
   window.speechSynthesis.speak(utterance);
 }
 
@@ -347,7 +372,7 @@ function speakLiveChunk(text, { interrupt = false } = {}) {
     state.voiceAudioQueue = Promise.resolve();
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }
-  setVoiceBubble('Hermes is talking', chunk, 'speaking');
+  setVoiceBubble('DERA is talking', chunk, 'speaking');
   state.voiceAudioQueue = state.voiceAudioQueue
     .then(() => speakWithKokoro(chunk))
     .catch(() => {
@@ -359,7 +384,7 @@ function speakLiveChunk(text, { interrupt = false } = {}) {
 function handleVoiceDelta(delta) {
   if (!state.voiceMode || state.voiceMuted) return;
   state.voiceStreamBuffer += delta;
-  setVoiceBubble('Hermes is writing and talking', 'Streaming response live. Speech starts on sentence chunks, not after the full answer.', 'speaking');
+  setVoiceBubble('DERA is writing and talking', 'Streaming response live. Speech starts on sentence chunks, not after the full answer.', 'speaking');
   const match = state.voiceStreamBuffer.match(/^([\s\S]*?[.!?])\s+/);
   if (!match) return;
   const sentence = match[1];
@@ -374,18 +399,25 @@ function flushVoiceBuffer() {
   if (remaining) speakLiveChunk(remaining);
 }
 
-function startVoiceConversation() {
+async function startVoiceConversation() {
   state.voiceMode = true;
   state.voiceMuted = false;
   state.micMuted = false;
   state.voiceStreamBuffer = '';
   updateVoiceControls();
+  await primeAudioPlayback();
   if (!state.recognition) {
-    setVoiceBubble('Voice input unavailable', 'This browser has no SpeechRecognition. Type in the chat; Hermes will answer shortly and Kokoro will speak when available.', 'muted');
+    setVoiceBubble('Voice input unavailable', 'This browser has no SpeechRecognition. Type in the chat; DERA will answer shortly and Kokoro will speak when available.', 'muted');
+    speakLiveChunk('Voice output is ready. Type a question and I’ll answer out loud.', { interrupt: true });
     return;
   }
-  setVoiceBubble('Voice mode listening', 'Microphone input stays local to the browser. Hermes will answer briefly and Kokoro will speak streamed chunks.', 'listening');
-  state.recognition.start();
+  setVoiceBubble('Voice mode listening', 'Microphone input stays local to the browser. DERA will answer briefly and Kokoro will speak streamed chunks.', 'listening');
+  speakLiveChunk('I’m listening. Ask me what to show or what to investigate.', { interrupt: true });
+  try {
+    state.recognition.start();
+  } catch (_) {
+    setVoiceBubble('Voice output ready', 'Speech recognition is already active or Safari blocked microphone start. Type a question and DERA will still speak.', 'listening');
+  }
 }
 
 function stopVoiceConversation() {
@@ -415,15 +447,36 @@ function toggleVoiceMute() {
   state.voiceMuted = !state.voiceMuted;
   if (state.voiceMuted && 'speechSynthesis' in window) window.speechSynthesis.cancel();
   updateVoiceControls();
-  setVoiceBubble(state.voiceMuted ? 'Hermes voice muted' : 'Hermes voice unmuted', state.voiceMuted ? 'Hermes will keep writing, but audio output is muted.' : 'Hermes will speak upcoming streamed sentence chunks through Kokoro when available.', state.voiceMuted ? 'muted' : 'listening');
+  setVoiceBubble(state.voiceMuted ? 'DERA voice muted' : 'DERA voice unmuted', state.voiceMuted ? 'DERA will keep writing, but audio output is muted.' : 'DERA will speak upcoming streamed sentence chunks through Kokoro when available.', state.voiceMuted ? 'muted' : 'listening');
+}
+
+function dashboardContextForChat() {
+  const config = currentConfig();
+  const visibleEvidence = getVisibleEvidence().map((ev) => ({ id: ev.id, lane: ev.lane, title: ev.title, summary: ev.summary }));
+  const selectedEvidence = state.selectedEvidence ? visibleEvidence.find((ev) => ev.id === state.selectedEvidence) || null : null;
+  const activeAgent = state.activeAgentId ? agentById(state.activeAgentId) : (state.incident?.subagents || []).find((agent) => agent.status === 'running') || null;
+  const activeTabLabels = { timeline: 'Chronology', evidence: 'Evidence', agents: 'Agents', dossier: 'Dossier', voice: 'Voice' };
+  return {
+    active_tab: state.activeTab,
+    active_tab_label: activeTabLabels[state.activeTab] || state.activeTab,
+    product_state: currentState(),
+    product_state_label: config.label,
+    operator_focus: config.focus,
+    primary_cta: config.cta?.label || '',
+    selected_evidence: selectedEvidence,
+    active_agent: activeAgent ? { id: activeAgent.id, name: activeAgent.name, status: activeAgent.status, finding: activeAgent.finding, confidence: activeAgent.confidence } : null,
+    dossier_ready_items: getDossierReadiness(),
+    visible_evidence: visibleEvidence,
+    chat_expanded: state.chatExpanded,
+  };
 }
 
 async function streamHermesMessage(item, question) {
-  updateHermesProgress(item, 'Opening live Hermes stream...');
+  updateHermesProgress(item, 'Opening live DERA stream...');
   const response = await fetch(`${apiBase}/api/incidents/${state.incident.id}/ask/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, voice_mode: state.voiceMode }),
+    body: JSON.stringify({ question, voice_mode: state.voiceMode, dashboard_context: dashboardContextForChat() }),
   });
   if (!response.ok || !response.body) throw new Error(`${response.status} ${response.statusText}: ${await response.text()}`);
   const reader = response.body.getReader();
@@ -457,7 +510,7 @@ async function streamHermesMessage(item, question) {
     if (event === 'done') {
       state.streamPhase = 'stream_done';
       flushVoiceBuffer();
-      if (!answer.trim()) updateHermesProgress(item, 'Hermes returned no text. Try again.');
+      if (!answer.trim()) updateHermesProgress(item, 'DERA returned no text. Try again.');
     }
   };
   while (true) {
@@ -476,7 +529,7 @@ async function streamHermesMessage(item, question) {
 function toggleChatExpanded() {
   state.chatExpanded = !state.chatExpanded;
   document.body.classList.toggle('chat-expanded', state.chatExpanded);
-  $('expandChatBtn').textContent = state.chatExpanded ? 'Collapse' : 'Expand';
+  $('expandChatBtn').textContent = state.chatExpanded ? 'Collapse chat' : 'Expand chat';
   $('expandChatBtn').setAttribute('aria-pressed', String(state.chatExpanded));
 }
 
@@ -517,10 +570,10 @@ function optimisticAgentFor(targetState) {
   if (!agent) return null;
   state.activeAgentId = agentId;
   state.activeAgentStage = targetState;
-  state.agentWorkLog = [`Queued ${agent.name}`, 'Opening synthetic incident packet'];
+  state.agentWorkLog = [`Queued ${agent.name}`, 'Opening incident packet'];
   agent.status = 'running';
-  agent.finding = 'Hermes specialist is working through the supplied synthetic context.';
-  agent.tool = 'live Hermes specialist reasoning';
+  agent.finding = 'DERA specialist is working through the supplied incident context.';
+  agent.tool = 'live DERA specialist reasoning';
   agent.timestamp = new Date().toTimeString().slice(0, 5);
   return agent;
 }
@@ -575,7 +628,7 @@ function renderIncident() {
   if (!incident) return;
   const config = currentConfig();
   document.body.dataset.productState = incident.state;
-  $('incidentState').textContent = state.investigating && state.activeAgentId ? `${agentById(state.activeAgentId)?.name || 'Hermes agent'} running` : config.label;
+  $('incidentState').textContent = state.investigating && state.activeAgentId ? `${agentById(state.activeAgentId)?.name || 'DERA agent'} running` : config.label;
   $('incidentTitle').textContent = incident.title;
   $('severityStatus').textContent = incident.severity;
   $('metricSpike').textContent = incident.impact.complaint_spike;
@@ -598,9 +651,9 @@ function renderIncident() {
 function renderPrimaryCta(config) {
   const cta = config.cta;
   const disabledBecauseBusy = state.investigating;
-  $('primaryCta').textContent = disabledBecauseBusy ? 'Hermes is working...' : cta.label;
+  $('primaryCta').textContent = disabledBecauseBusy ? 'DERA is working...' : cta.label;
   $('primaryCta').disabled = disabledBecauseBusy || !cta.enabled;
-  const reason = disabledBecauseBusy ? 'Waiting for Hermes to finish this investigation step.' : cta.reason;
+  const reason = disabledBecauseBusy ? 'Waiting for DERA to finish this investigation step.' : cta.reason;
   $('primaryCtaReason').textContent = reason || '';
   $('primaryCtaReason').hidden = !reason;
 }
@@ -641,14 +694,87 @@ function renderEvidence() {
 function agentHistory(agent) {
   const base = [`${agent.timestamp || 'now'} ${agent.status}`];
   if (agent.status === 'queued') base.push('Waiting for prerequisite evidence');
-  if (agent.status === 'running') base.push('Reading synthetic evidence packet');
+  if (agent.status === 'running') base.push('Reading evidence packet');
   if (agent.status === 'complete') base.push(`Finding produced: ${agent.finding}`);
-  if (agent.status === 'blocked') base.push('Blocked: live Hermes specialist reasoning unavailable');
+  if (agent.status === 'blocked') base.push('Blocked: live DERA specialist reasoning unavailable');
   return base;
 }
 
+function renderAgentFlowGraph() {
+  const agents = state.incident.subagents || [];
+  const byId = Object.fromEntries(agents.map((agent) => [agent.id, agent]));
+  const flow = [
+    ['customer_signal', '1', 'Customer signal', 'complaints → journey impact'],
+    ['observability', '2', 'Observability', 'latency → error rate'],
+    ['change_correlation', '3', 'Change correlation', 'release window → blast radius'],
+    ['recovery', '4', 'Recovery', 'rollback plan → customer wording'],
+  ];
+  const supervisor = byId.supervisor || agents[0];
+  const activeAgent = agentById(state.activeAgentId) || agents.find((agent) => agent.status === 'running') || supervisor;
+  const completeCount = agents.filter((agent) => agent.status === 'complete').length;
+  const runningCount = agents.filter((agent) => agent.status === 'running').length;
+  const queuedCount = agents.filter((agent) => agent.status === 'queued').length;
+  const progress = agents.length ? Math.round((completeCount / agents.length) * 100) : 0;
+  const currentOperation = activeAgent
+    ? (state.activeAgentId === activeAgent.id && state.agentWorkLog.length ? state.agentWorkLog[state.agentWorkLog.length - 1] : activeAgent.finding)
+    : 'Ready to coordinate the specialist flow.';
+  const specialistNodes = flow.map(([id, step, label, route], index) => {
+    const agent = byId[id];
+    if (!agent) return '';
+    const isActive = state.activeAgentId === id || (!state.activeAgentId && agent.status === 'running');
+    const status = isActive && state.investigating ? 'working now' : agent.status;
+    const confidence = agent.confidence == null ? 'pending' : `${Math.round(agent.confidence * 100)}%`;
+    return `
+      <button class="agent-flow-step ${agent.status} ${isActive ? 'active' : ''}" data-agent-open="${escapeHtml(id)}" style="--i:${index}">
+        <span class="step-index">${escapeHtml(step)}</span>
+        <span class="step-copy">
+          <strong>${escapeHtml(label)}</strong>
+          <small>${escapeHtml(route)}</small>
+        </span>
+        <span class="step-meta">
+          <span class="node-orb"></span>
+          <em>${escapeHtml(status)}</em>
+          <small>${escapeHtml(confidence)}</small>
+        </span>
+      </button>`;
+  }).join('');
+  return `
+    <section class="agent-flow" aria-label="DERA agent hierarchy and information flow">
+      <div class="agent-flow-hero">
+        <div class="agent-flow-copy">
+          <span class="eyebrow">Living DERA agent graph</span>
+          <h3>Supervisor hub with specialist dependency flow</h3>
+          <p>DERA routes customer pain through technical evidence, change correlation, and recovery planning, then returns a supervised decision package.</p>
+        </div>
+        <div class="agent-flow-stats" aria-label="Agent work summary">
+          <span><strong>${completeCount}</strong> complete</span>
+          <span><strong>${runningCount}</strong> running</span>
+          <span><strong>${queuedCount}</strong> queued</span>
+        </div>
+      </div>
+      <div class="agent-map-shell">
+        <button class="agent-supervisor-hub ${supervisor?.status || 'queued'} ${state.activeAgentId === 'supervisor' ? 'active' : ''}" data-agent-open="supervisor">
+          <span class="hub-ring"><span class="hub-core"><span class="node-orb"></span></span></span>
+          <span class="hub-copy">
+            <em>Supervisor</em>
+            <strong>${escapeHtml(supervisor?.name || 'Digital Experience Supervisor')}</strong>
+            <small>${escapeHtml(supervisor?.status || 'queued')} · evidence router</small>
+          </span>
+        </button>
+        <div class="agent-dependency-rail" aria-label="Specialist dependency chain">${specialistNodes}</div>
+        <div class="agent-pulse-panel">
+          <span class="eyebrow">Active pulse</span>
+          <strong>${escapeHtml(activeAgent?.name || 'DERA')}</strong>
+          <p>${escapeHtml(currentOperation)}</p>
+          <div class="agent-progress"><span style="width:${progress}%"></span></div>
+          <small>${progress}% of specialist work complete</small>
+        </div>
+      </div>
+    </section>`;
+}
+
 function renderAgents() {
-  $('agentList').innerHTML = state.incident.subagents.map((agent) => {
+  const cards = state.incident.subagents.map((agent) => {
     const evidenceId = agent.evidence_id;
     const evidenceChip = evidenceId ? `<button class="evidence-chip" data-evidence-id="${evidenceId}">${evidenceId}</button>` : '<span class="muted-text">No evidence linked</span>';
     const isActive = state.activeAgentId === agent.id;
@@ -663,11 +789,12 @@ function renderAgents() {
       <footer><span>Confidence: ${agent.confidence == null ? 'pending' : agent.confidence.toFixed(2)}</span><button class="link-btn" data-agent-open="${escapeHtml(agent.id)}">Open work</button><button class="link-btn" data-evidence-id="${evidenceId}">View evidence</button><span>${escapeHtml(agent.timestamp)}</span></footer>
     </article>`;
   }).join('');
-  document.querySelectorAll('.agent-card').forEach((card) => card.addEventListener('click', (event) => {
+  $('agentList').innerHTML = `${renderAgentFlowGraph()}<div class="agent-card-grid">${cards}</div>`;
+  document.querySelectorAll('.agent-card, .agent-flow-step, .agent-supervisor-hub').forEach((card) => card.addEventListener('click', (event) => {
     if (event.target.closest('[data-evidence-id]')) return;
-    openAgentDrawer(card.dataset.agentId);
+    openAgentDrawer(card.dataset.agentId || card.dataset.agentOpen);
   }));
-  document.querySelectorAll('.agent-card [data-agent-open]').forEach((btn) => btn.addEventListener('click', (event) => { event.stopPropagation(); openAgentDrawer(btn.dataset.agentOpen); }));
+  document.querySelectorAll('[data-agent-open]').forEach((btn) => btn.addEventListener('click', (event) => { event.stopPropagation(); openAgentDrawer(btn.dataset.agentOpen); }));
   document.querySelectorAll('.agent-card [data-evidence-id]').forEach((btn) => btn.addEventListener('click', (event) => { event.stopPropagation(); openEvidence(btn.dataset.evidenceId); }));
 }
 
@@ -679,7 +806,7 @@ function openAgentDrawer(agentId) {
   const evidenceId = agent.evidence_id;
   $('agentDrawerKicker').textContent = isActive ? 'Live agent workstream' : 'Agent workstream';
   $('agentDrawerTitle').textContent = agent.name;
-  $('agentDrawerSummary').textContent = isActive ? 'Hermes is actively working on this specialist step now.' : agent.finding;
+  $('agentDrawerSummary').textContent = isActive ? 'DERA is actively working on this specialist step now.' : agent.finding;
   $('agentDrawerBody').innerHTML = `
     <section><h3>Status</h3><p><strong>${escapeHtml(isActive ? 'running live' : agent.status)}</strong> · Confidence ${agent.confidence == null ? 'pending' : agent.confidence.toFixed(2)}</p></section>
     <section><h3>Visible reasoning summary</h3><p>${escapeHtml(AGENT_REASONING_SUMMARIES[agent.id] || AGENT_REASONING_SUMMARIES.supervisor)}</p><p class="microcopy">This is an operator-facing summary of the agent's work, not hidden chain-of-thought.</p></section>
@@ -710,7 +837,7 @@ function renderDossier() {
   $('approvalGate').hidden = state.incident.state !== 'approval_required';
   if (!ready) {
     const pending = getDossierReadiness().filter((item) => item.status === 'pending').map((item) => item.label).join(', ');
-    $('dossierContent').innerHTML = `<p class="muted-text">Hermes still needs: ${escapeHtml(pending || 'final synthesis')}. Use the primary CTA to continue the local synthetic investigation.</p>`;
+    $('dossierContent').innerHTML = `<p class="muted-text">DERA still needs: ${escapeHtml(pending || 'final synthesis')}. Use the primary CTA to continue the investigation.</p>`;
     return;
   }
   $('dossierContent').innerHTML = `
@@ -728,12 +855,12 @@ function renderDossier() {
 function renderTimeline() {
   if (!state.incident) return;
   const fixed = [
-    { time: '09:51', title: 'Customer pain emerges', body: 'Complaint spike: MFA codes not arriving during login.', state: 'ready_with_incident', source: 'Synthetic baseline' },
-    { time: '09:52', title: 'Customer signal clustering', body: 'Hermes Customer Signal Agent clusters masked complaints.', state: 'investigating.customer_signal', source: 'Hermes event' },
-    { time: '09:53', title: 'Telemetry check', body: 'Observability examines auth gateway latency and 504 errors.', state: 'investigating.observability', source: 'Hermes event' },
-    { time: '09:54', title: 'Change correlation', body: 'Hermes compares the incident window with CHG-1048.', state: 'investigating.change_correlation', source: 'Hermes event' },
-    { time: '09:55', title: 'Recovery planning', body: 'Recovery & Communication Agent prepares rollback and messaging.', state: 'investigating.recovery_planning', source: 'Hermes event' },
-    { time: '09:56', title: 'Human gate', body: 'Dossier is ready for local synthetic approval or rejection.', state: 'approval_required', source: 'Operator action' },
+    { time: '09:51', title: 'Customer pain emerges', body: 'Complaint spike: MFA codes not arriving during login.', state: 'ready_with_incident', source: 'Practice baseline' },
+    { time: '09:52', title: 'Customer signal clustering', body: 'DERA Customer Signal Agent clusters masked complaints.', state: 'investigating.customer_signal', source: 'DERA event' },
+    { time: '09:53', title: 'Telemetry check', body: 'Observability examines auth gateway latency and 504 errors.', state: 'investigating.observability', source: 'DERA event' },
+    { time: '09:54', title: 'Change correlation', body: 'DERA compares the incident window with CHG-1048.', state: 'investigating.change_correlation', source: 'DERA event' },
+    { time: '09:55', title: 'Recovery planning', body: 'Recovery & Communication Agent prepares rollback and messaging.', state: 'investigating.recovery_planning', source: 'DERA event' },
+    { time: '09:56', title: 'Human gate', body: 'Dossier is ready for local approval or rejection.', state: 'approval_required', source: 'Operator action' },
   ];
   const currentIdx = orderIndex(state.incident.state);
   const liveEvents = (state.incident.events || []).slice(-8).map((event) => ({ time: (event.created_at || '').slice(11, 16) || 'now', title: event.event_type, body: JSON.stringify(event.payload), live: true, source: 'Runtime event' }));
@@ -821,12 +948,12 @@ async function advanceInvestigationStep() {
     stopAgentWorkAnimation(false);
     const completedAgentId = AGENT_BY_TARGET_STATE[state.incident.state] || state.activeAgentId;
     state.activeAgentId = completedAgentId;
-    state.agentWorkLog.push('Hermes returned specialist result');
+    state.agentWorkLog.push('DERA returned specialist result');
     const nextTab = ['dossier_ready', 'approval_required'].includes(state.incident.state) ? 'dossier' : 'agents';
     setActiveTab(nextTab);
     renderIncident();
     if (!$('agentDrawer').hidden && completedAgentId) openAgentDrawer(completedAgentId);
-    if (state.incident.state === 'approval_required') addChat('hermes', 'The evidence chain is complete. Review the recovery dossier and use the local synthetic approval gate.');
+    if (state.incident.state === 'approval_required') addChat('hermes', 'The evidence chain is complete. Review the recovery dossier and use the supervised approval gate.');
     window.setTimeout(() => { if (!state.investigating) stopAgentWorkAnimation(true); renderIncident(); }, 1400);
   } catch (error) {
     stopAgentWorkAnimation(true);
@@ -860,6 +987,78 @@ function chatQuestionFromInput() {
   return $('chatInput').value.trim();
 }
 
+async function routeDashboardCommand(question) {
+  const q = question.toLowerCase();
+  if (/\b(technical timeline|why|what|how|explain|summarize|list|compare)\b/.test(q)) return false;
+  let action = '';
+  if (/\b(show|open|switch|bring).*(agent|workstream|working)|\bagents?\b.*\bworking\b/.test(q)) {
+    setActiveTab('agents');
+    action = 'Opening the live agent workstream now. You can see who is queued, running, complete, and which evidence each agent is using.';
+  } else if (/\b(show|open|switch|bring).*(evidence|proof)/.test(q)) {
+    setActiveTab('evidence');
+    action = 'Opening the evidence canvas now, with customer signal, telemetry, change, and recovery evidence grouped by lane.';
+  } else if (/\b(show|open|switch|bring).*(dossier|approval|recovery plan)/.test(q)) {
+    setActiveTab('dossier');
+    action = 'Opening the recovery dossier now, including readiness, recommended action, risks, and the local approval gate when available.';
+  } else if (/\b(show|open|switch|bring).*(timeline|chronology)/.test(q)) {
+    setActiveTab('timeline');
+    action = 'Opening the chronology now so you can follow the incident sequence in order.';
+  } else if (/\b(show|open|switch|bring).*(voice|talk)|\bvoice mode\b/.test(q)) {
+    setActiveTab('voice');
+    action = 'Opening voice mode settings now. Talk stays in the DERA command rail, with microphone and audio controls separated.';
+  } else if (/\b(expand|bigger|larger|full).*(chat|hermes)|\bfullscreen chat\b/.test(q)) {
+    if (!state.chatExpanded) toggleChatExpanded();
+    action = 'Expanded the DERA command rail so the conversation has more room.';
+  } else if (/\b(collapse|smaller).*(chat|hermes)/.test(q)) {
+    if (state.chatExpanded) toggleChatExpanded();
+    action = 'Collapsed the DERA command rail back to the normal cockpit layout.';
+  } else if (/\b(start|continue|advance|next).*(investigation|telemetry|correlate|recovery|dossier)|\bstart investigation\b|\bcontinue\b/.test(q)) {
+    action = 'Advancing the investigation now. I’ll move the cockpit to the next workstream and show the live agent activity.';
+    await performPrimaryAction();
+  }
+  if (!action) return false;
+  addChat('hermes', action, state.hermesConnected ? 'hermes-api' : 'hermes-unavailable');
+  speakLiveChunk(action, { interrupt: true });
+  return true;
+}
+
+function inferDashboardPlacement(question) {
+  const q = question.toLowerCase();
+  let targetTab = '';
+  let selectedEvidence = '';
+  if (/\b(evidence|proof|support|supports|why|suspect|uncertain|uncertainty|complaint|telemetry|latency|504|change|chg-?1048|rollback)\b/.test(q)) {
+    targetTab = 'evidence';
+  }
+  if (/\b(agent|agents|workstream|working|specialist|supervisor|observability|customer signal|correlation|recovery agent)\b/.test(q)) {
+    targetTab = 'agents';
+  }
+  if (/\b(dossier|approve|approval|risk|risks|customer message|executive|recovery plan|decision)\b/.test(q)) {
+    targetTab = 'dossier';
+  }
+  if (/\b(timeline|chronology|sequence|when|window|history|unfolded)\b/.test(q)) {
+    targetTab = 'timeline';
+  }
+  if (/\bvoice|sound|talk|mic|microphone\b/.test(q)) {
+    targetTab = 'voice';
+  }
+  if (/complaint|customer pain|mfa|customer signal/.test(q)) selectedEvidence = 'ev_customer_complaints';
+  if (/telemetry|latency|504|auth gateway|observability/.test(q)) selectedEvidence = 'ev_telemetry_latency';
+  if (/chg-?1048|change|release|deploy/.test(q)) selectedEvidence = 'ev_change_chg1048';
+  if (/rollback|recovery plan|validation|customer message/.test(q)) selectedEvidence = 'ev_recovery_plan';
+  return { targetTab, selectedEvidence };
+}
+
+function applyQuestionPlacement(question) {
+  const placement = inferDashboardPlacement(question);
+  if (!placement.targetTab) return null;
+  if (placement.targetTab !== state.activeTab) setActiveTab(placement.targetTab);
+  if (placement.selectedEvidence && placement.targetTab === 'evidence') {
+    state.selectedEvidence = placement.selectedEvidence;
+    renderEvidence();
+  }
+  return placement;
+}
+
 async function askHermes(question) {
   const cleanQuestion = String(question || '').trim();
   if (!cleanQuestion) {
@@ -869,15 +1068,17 @@ async function askHermes(question) {
   if (!state.incident) return;
   clearChatInputHint();
   addChat('operator', cleanQuestion);
-  const pending = addHermesWritingMessage('Opening incident context...');
   $('chatInput').value = '';
+  if (await routeDashboardCommand(cleanQuestion)) return;
+  applyQuestionPlacement(cleanQuestion);
+  const pending = addHermesWritingMessage('Opening incident and dashboard context...');
   try {
     await streamHermesMessage(pending, cleanQuestion);
   } catch (streamError) {
     state.streamPhase = 'stream_error';
-    updateHermesProgress(pending, 'Streaming failed. Trying non-streaming Hermes response...');
+    updateHermesProgress(pending, 'Streaming failed. Trying non-streaming DERA response...');
     try {
-      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', body: JSON.stringify({ question: cleanQuestion, voice_mode: state.voiceMode }) });
+      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', body: JSON.stringify({ question: cleanQuestion, voice_mode: state.voiceMode, dashboard_context: dashboardContextForChat() }) });
       await typeHermesMessage(pending, result.answer, result.adapter_mode);
     } catch (error) {
       await typeHermesMessage(pending, `I could not answer from the backend: ${error.message || streamError.message}`, 'hermes-unavailable');
@@ -890,7 +1091,7 @@ async function reviseDossier() {
   const field = $('revisionField').value;
   const instruction = $('revisionInstruction').value || 'Make this clearer and safer for operators.';
   addChat('operator', `Revise ${field}: ${instruction}`);
-  const pending = addHermesWritingMessage('Sending dossier revision to Hermes...');
+  const pending = addHermesWritingMessage('Sending dossier revision to DERA...');
   try {
     await api(`/api/incidents/${state.incident.id}/dossier/revise`, { method: 'POST', body: JSON.stringify({ field, instruction }) });
     state.incident = await api(`/api/incidents/${state.incident.id}/state`);
@@ -904,14 +1105,14 @@ async function reviseDossier() {
 async function recordApproval(decision) {
   state.incident = await api(`/api/incidents/${state.incident.id}/approval`, { method: 'POST', body: JSON.stringify({ decision }) });
   renderIncident();
-  addChat('hermes', decision === 'approved_local' ? 'Local synthetic recovery approval recorded. No external action was executed.' : 'Recommendation rejected locally. No external action was executed.', state.hermesConnected ? 'hermes-api' : 'hermes-unavailable');
+  addChat('hermes', decision === 'approved_local' ? 'Local recovery approval recorded. No external action was executed.' : 'Recommendation rejected locally. No external action was executed.', state.hermesConnected ? 'hermes-api' : 'hermes-unavailable');
 }
 
 function speak(text) {
   if (!('speechSynthesis' in window)) { $('voiceStatus').textContent = 'Browser speech synthesis unavailable. Text chat remains available.'; return; }
   state.voiceMode = true;
   updateVoiceControls();
-  setVoiceBubble('Hermes is talking', 'Speaking requested summary through the browser voice bridge — no telephony connected.', 'speaking');
+  setVoiceBubble('DERA is talking', 'Speaking the requested summary — no telephony connected.', 'speaking');
   speakLiveChunk(text, { interrupt: true });
 }
 
@@ -928,7 +1129,7 @@ function setupVoice() {
   state.recognition.onresult = (event) => {
     const transcript = event.results[event.results.length - 1][0].transcript;
     $('chatInput').value = transcript;
-    setVoiceBubble('Hermes heard you', transcript, 'listening');
+    setVoiceBubble('DERA heard you', transcript, 'listening');
     askHermes(transcript);
   };
   state.recognition.onstart = () => setVoiceBubble('Listening', 'Listening through browser microphone permission — no telephony connected.', 'listening');
