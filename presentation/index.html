@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DERA — Digital Experience Recovery Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #06060B;
+      --bg2:        #0E0E16;
+      --blue:       #0A84FF;
+      --blue-dim:   rgba(10,132,255,0.18);
+      --blue-glow:  rgba(10,132,255,0.35);
+      --green:      #30D158;
+      --purple:     #BF5AF2;
+      --text-1:     #FFFFFF;
+      --text-2:     rgba(255,255,255,0.55);
+      --text-3:     rgba(255,255,255,0.30);
+      --glass:      rgba(255,255,255,0.05);
+      --glass-b:    rgba(255,255,255,0.10);
+      --r:          16px;
+      --r-sm:       10px;
+      --dur:        480ms;
+      --ease:       cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Outfit', system-ui, sans-serif;
+      color: var(--text-1);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── DECK ── */
+    #deck {
+      width: 100vw; height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── SLIDE ── */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 80px;
+      gap: 0;
+      opacity: 0;
+      transform: translateX(60px);
+      pointer-events: none;
+      transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+      will-change: transform, opacity;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: all;
+    }
+
+    .slide.exit-left {
+      opacity: 0;
+      transform: translateX(-60px);
+    }
+
+    /* ── NOISE BACKGROUND ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── GRADIENT ORBS ── */
+    .slide-bg {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.18;
+    }
+
+    /* ── SLIDE CONTENT ── */
+    .slide-inner {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── EYEBROW ── */
+    .eyebrow {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--blue);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .eyebrow::before {
+      content: '';
+      width: 20px;
+      height: 1px;
+      background: var(--blue);
+      display: inline-block;
+    }
+
+    /* ── SLIDE TITLE ── */
+    .slide-title {
+      font-size: clamp(2.2rem, 5vw, 4rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      color: var(--text-1);
+    }
+
+    .slide-subtitle {
+      font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+      font-weight: 400;
+      color: var(--text-2);
+      line-height: 1.6;
+      max-width: 720px;
+    }
+
+    /* ── GLASS CARD ── */
+    .card {
+      background: var(--glass);
+      border: 1px solid var(--glass-b);
+      border-radius: var(--r);
+      padding: 22px 24px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: border-color 0.3s;
+    }
+    .card:hover { border-color: rgba(255,255,255,0.18); }
+
+    .card-icon {
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+    }
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 6px;
+    }
+    .card-body {
+      font-size: 0.9rem;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+
+    /* ── GRID UTILITIES ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+
+    /* ── BIG STAT ── */
+    .stat-num {
+      font-size: clamp(2rem, 4.5vw, 3.5rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      background: none;
+      -webkit-text-fill-color: initial;
+      color: var(--text-1);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-2);
+      margin-top: 6px;
+      font-weight: 400;
+      line-height: 1.4;
+    }
+
+    /* ── GRADIENT TEXT ── */
+    .gradient-text {
+      background: linear-gradient(135deg, #fff 30%, var(--blue) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── PILL / BADGE ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--blue-dim);
+      border: 1px solid var(--blue-glow);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--blue);
+    }
+
+    /* ── TABLE ── */
+    .glass-table { width: 100%; border-collapse: collapse; }
+    .glass-table thead tr {
+      border-bottom: 1px solid var(--glass-b);
+    }
+    .glass-table th {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--blue);
+      padding: 10px 14px;
+      text-align: left;
+    }
+    .glass-table td {
+      font-size: 0.85rem;
+      color: var(--text-2);
+      padding: 12px 14px;
+      line-height: 1.5;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      vertical-align: top;
+    }
+    .glass-table td:first-child { color: var(--text-1); font-weight: 600; }
+    .glass-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* ── TIMELINE ── */
+    .timeline {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      position: relative;
+      margin: 8px 0;
+    }
+    .tl-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .tl-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(to right, var(--blue), var(--blue-dim));
+    }
+    .tl-dot {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--blue-dim);
+      border: 2px solid var(--blue);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.6rem; font-weight: 700; color: var(--blue);
+      position: relative; z-index: 1;
+      margin-bottom: 8px;
+    }
+    .tl-time {
+      font-size: 0.75rem; font-weight: 700; color: var(--blue);
+      margin-bottom: 4px;
+    }
+    .tl-label {
+      font-size: 0.72rem; color: var(--text-2);
+      text-align: center;
+      max-width: 90px;
+      line-height: 1.4;
+    }
+
+    /* ── ARCH ── */
+    .arch-box {
+      background: var(--glass);
+      border: 1px solid var(--glass-b);
+      border-radius: var(--r-sm);
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-1);
+      transition: border-color 0.3s;
+    }
+    .arch-box.supervisor {
+      border-color: var(--blue-glow);
+      background: var(--blue-dim);
+    }
+    .arch-box.gate {
+      border-color: rgba(48,209,88,0.4);
+      background: rgba(48,209,88,0.07);
+      color: var(--green);
+    }
+    .arch-box sub {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 400;
+      color: var(--text-2);
+      margin-top: 2px;
+    }
+
+    .arch-arrows {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: var(--text-3);
+      padding: 6px 0;
+    }
+
+    /* ── RISK CARD ── */
+    .risk-card {
+      background: var(--glass);
+      border: 1px solid var(--glass-b);
+      border-radius: var(--r);
+      padding: 20px 22px;
+    }
+    .risk-scenario {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(255,159,10,0.9);
+      margin-bottom: 6px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .risk-scenario::before { content: '⚠'; font-size: 0.9em; }
+    .risk-response { font-size: 0.85rem; color: var(--text-2); line-height: 1.55; }
+
+    /* ── PHASE CARD ── */
+    .phase-num {
+      font-size: 2.4rem;
+      font-weight: 900;
+      color: var(--blue-dim);
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .phase-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 4px;
+    }
+    .phase-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-1);
+      margin-bottom: 6px;
+    }
+    .phase-body {
+      font-size: 0.8rem;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+
+    /* ── COMPLIANCE BADGES ── */
+    .compliance-row {
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .compliance-pill {
+      background: rgba(48,209,88,0.1);
+      border: 1px solid rgba(48,209,88,0.3);
+      border-radius: 999px;
+      padding: 4px 14px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--green);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .compliance-pill::before { content: '✓'; }
+
+    /* ── QUOTE ── */
+    .quote {
+      font-size: clamp(0.9rem, 1.5vw, 1.1rem);
+      font-style: italic;
+      font-weight: 400;
+      color: var(--text-2);
+      border-left: 2px solid var(--blue);
+      padding-left: 16px;
+    }
+
+    /* ── TEAM LINE ── */
+    .team-line {
+      font-size: 0.78rem;
+      color: var(--text-3);
+      font-weight: 400;
+      margin-top: 8px;
+    }
+
+    /* ── COVER SPECIFIC ── */
+    #s1 .slide-inner { align-items: center; text-align: center; }
+    #s1 .dera-word {
+      font-size: clamp(5rem, 16vw, 12rem);
+      font-weight: 900;
+      letter-spacing: -0.05em;
+      line-height: 0.9;
+      color: #ffffff;
+      padding-right: 0.08em; /* Fixes right-edge clipping without left-shifting the whole word */
+    }
+
+    /* ── SLIDE 4 SPECIFIC ANIMATIONS ── */
+    #s4.active .s4-grid { animation: none !important; }
+    #s4.active .s4-left { animation: fade-up 500ms var(--ease) both; animation-delay: 100ms; }
+    #s4.active .s4-right > *:nth-child(1) { animation: fade-up 500ms var(--ease) both; animation-delay: 200ms; }
+    #s4.active .s4-right > *:nth-child(2) { animation: fade-up 500ms var(--ease) both; animation-delay: 300ms; }
+    #s4.active .s4-right > *:nth-child(3) { animation: fade-up 500ms var(--ease) both; animation-delay: 400ms; }
+    #s4.active .s4-right > *:nth-child(4) { animation: fade-up 500ms var(--ease) both; animation-delay: 500ms; }
+    #s4.active .s4-right > *:nth-child(5) { animation: fade-up 500ms var(--ease) both; animation-delay: 600ms; }
+
+    /* ── THANK YOU ── */
+    .particles-container {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      overflow: hidden; pointer-events: none; z-index: 0;
+    }
+    .particle {
+      position: absolute; background: rgba(255, 255, 255, 0.7);
+      border-radius: 50%; bottom: -10px; animation: float-up linear infinite;
+    }
+    @keyframes float-up {
+      0% { transform: translateY(0) scale(0.5); opacity: 0; }
+      15% { opacity: 1; transform: translateY(-15vh) scale(1); }
+      85% { opacity: 1; }
+      100% { transform: translateY(-110vh) scale(0.5); opacity: 0; }
+    }
+
+    #s12 .slide-inner { align-items: center; text-align: center; gap: 18px; }
+    #s12 .ty-title {
+      font-size: clamp(3rem, 8vw, 6rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+
+    /* ── SLIDE STAT BANNER ── */
+    .stat-banner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      background: var(--blue-dim);
+      border: 1px solid var(--blue-glow);
+      border-radius: var(--r);
+      padding: 14px 28px;
+    }
+    .stat-banner .vs {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-2);
+      padding: 0 8px;
+    }
+
+    /* ── NAV ── */
+    #nav {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: rgba(14,14,22,0.82);
+      border: 1px solid var(--glass-b);
+      border-radius: 999px;
+      padding: 8px 20px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    #nav button {
+      background: none;
+      border: none;
+      color: var(--text-2);
+      cursor: pointer;
+      font-size: 1rem;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s;
+    }
+    #nav button:hover { background: var(--glass); color: var(--text-1); }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+    }
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-3);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .dot.active {
+      background: var(--blue);
+      width: 20px;
+      border-radius: 3px;
+    }
+
+    #counter {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-3);
+      min-width: 38px;
+      text-align: right;
+    }
+
+    /* ── LOGO MARK ── */
+    #logo-mark {
+      position: fixed;
+      top: 22px;
+      left: 28px;
+      z-index: 100;
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--text-3);
+    }
+
+    /* ── HINT ── */
+    #hint {
+      position: fixed;
+      top: 22px;
+      right: 28px;
+      font-size: 0.68rem;
+      color: var(--text-3);
+      z-index: 100;
+    }
+    kbd {
+      background: var(--glass);
+      border: 1px solid var(--glass-b);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 0.65rem;
+    }
+
+    /* ── ENTRANCE ANIMATION ── */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .slide.active .slide-inner > * {
+      animation: fade-up 500ms var(--ease) both;
+    }
+    .slide.active .slide-inner > *:nth-child(1) { animation-delay: 50ms; }
+    .slide.active .slide-inner > *:nth-child(2) { animation-delay: 120ms; }
+    .slide.active .slide-inner > *:nth-child(3) { animation-delay: 190ms; }
+    .slide.active .slide-inner > *:nth-child(4) { animation-delay: 260ms; }
+    .slide.active .slide-inner > *:nth-child(5) { animation-delay: 320ms; }
+    .slide.active .slide-inner > *:nth-child(6) { animation-delay: 380ms; }
+
+    /* ── DIVIDER ── */
+    hr.glass-hr {
+      border: none;
+      border-top: 1px solid var(--glass-b);
+      width: 100%;
+    }
+
+    /* ── COMPACT SPACING FOR DENSE SLIDES ── */
+    .compact .card-body { font-size: 0.82rem; }
+    .compact .card { padding: 16px 18px; }
+
+    /* ── ICON UTILITY ── */
+    .blue { color: var(--blue); }
+    .green { color: var(--green); }
+    .purple { color: var(--purple); }
+  </style>
+</head>
+<body>
+  <div id="logo-mark">DERA</div>
+  <div id="hint"><kbd>←</kbd> <kbd>→</kbd> to navigate</div>
+
+  <div id="deck">
+
+    <!-- ═══════════ SLIDE 1 — COVER ═══════════ -->
+    <section class="slide active" id="s1">
+      <div class="slide-bg">
+        <div class="orb" style="width:600px;height:600px;background:var(--blue);top:-200px;left:-200px;opacity:0.18;"></div>
+        <div class="orb" style="width:400px;height:400px;background:#001A99;bottom:-100px;right:-100px;opacity:0.25;"></div>
+      </div>
+      <div class="slide-inner" style="align-items:center;text-align:center;gap:12px;">
+        <div style="display:grid; place-items:center; position:relative;">
+          <!-- 3D Spheron centered exactly in the grid cell, slightly elevated via transform -->
+          <div style="grid-area:1/1; z-index:-1; transform:translateY(-15%); pointer-events:none;">
+            <canvas id="spheronCanvas" style="width:180px; height:180px; display:block; border-radius:50%;"></canvas>
+          </div>
+          <div class="dera-word" style="grid-area:1/1; z-index:1; transform:translateY(32px);">DERA</div>
+        </div>
+        <h1 class="slide-title" style="font-size:clamp(1.2rem,2.5vw,1.8rem);font-weight:500;color:var(--text-2);letter-spacing:-0.01em;">Digital Experience Recovery Agent</h1>
+        <p class="slide-subtitle" style="text-align:center;">Agentic AI Solution for Mobile Banking Incident Response</p>
+        <p style="font-size:0.78rem;color:var(--text-3);text-align:center;">Apex Global Bank &middot; Customer Experience &amp; Digital Channels &middot; Agentic AI for IT</p>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--glass-b);width:100%;max-width:600px;">
+          <p class="team-line" style="text-align:center;">Rayane Mazari &middot; Jaume Balaguer &middot; Joyce Eskafi &middot; Magdalena Tasevska &middot; Riyad Mazari</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 2 — THE PROBLEM ═══════════ -->
+    <section class="slide" id="s2">
+      <div class="slide-bg">
+        <div class="orb" style="width:500px;height:500px;background:#FF453A;top:-150px;right:-100px;opacity:0.1;"></div>
+      </div>
+      <div class="slide-inner">
+        <span class="eyebrow">02 — The Problem</span>
+        <h2 class="slide-title">A Crisis Hidden <br/>in Plain Sight</h2>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
+            <div class="card-title">Siloed Data</div>
+            <div class="card-body">IT and customer service have zero shared visibility. Nobody tells anybody when something breaks.</div>
+          </div>
+          <div class="card">
+            <div class="card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg></div>
+            <div class="card-title">37% More Complaints</div>
+            <div class="card-body">Login failures and MFA errors are getting worse across mobile and web.</div>
+          </div>
+          <div class="card">
+            <div class="card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></div>
+            <div class="card-title">Overwhelmed Call Centers</div>
+            <div class="card-body">Agents answer calls with no idea what is happening technically.</div>
+          </div>
+          <div class="card">
+            <div class="card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg></div>
+            <div class="card-title">No Shared Incident View</div>
+            <div class="card-body">When a customer moves from the app to a phone call, all context disappears.</div>
+          </div>
+        </div>
+        <div style="background:rgba(255,69,58,0.08);border:1px solid rgba(255,69,58,0.25);border-radius:var(--r);padding:14px 22px;display:flex;align-items:center;gap:16px;">
+          <span class="count-up" data-val="142" data-suffix=" min" style="font-size:clamp(1.6rem,3vw,2.4rem);font-weight:900;color:#FF453A;letter-spacing:-0.03em;">142 min</span>
+          <span style="font-size:0.85rem;color:var(--text-2);">— the current average time to fix a major banking system failure</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 3 — OUR SOLUTION ═══════════ -->
+    <section class="slide" id="s3">
+      <div class="slide-bg">
+        <div class="orb" style="width:600px;height:600px;background:var(--blue);bottom:-250px;left:50%;transform:translateX(-50%);opacity:0.12;"></div>
+      </div>
+      <div class="slide-inner">
+        <span class="eyebrow">03 — Our Solution</span>
+        <h2 class="slide-title">Digital Experience<br/>Recovery Agent</h2>
+        <p class="slide-subtitle">Five AI agents that detect, diagnose, and coordinate recovery for digital banking incidents — while humans approve every high-risk action.</p>
+        <p style="font-size:0.9rem;color:var(--text-3);text-align:center;max-width:800px;margin:10px auto;">Hermes acts as the agentic runtime layer powering supervisor orchestration, sub-agent delegation, session control and approval-aware reasoning. The frontend is a recovery cockpit built around that runtime.</p>
+        <div class="grid-3">
+          <div class="card" style="border-top:3px solid var(--blue);">
+            <div class="card-title">Detect</div>
+            <div class="card-icon" style="display:flex;justify-content:center;align-items:center;margin-bottom:12px;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></div>
+            <p style="font-size:0.78rem;font-weight:700;color:var(--text-1);margin-bottom:4px;">Spots the problem</p>
+            <div class="card-body">Watches customer complaints across calls, chat, and social media and flags when something goes wrong before the tech team knows.</div>
+          </div>
+          <div class="card" style="border-top:3px solid #5AC8FA;">
+            <div class="card-title" style="color:#5AC8FA;">Diagnose</div>
+            <div class="card-icon" style="display:flex;justify-content:center;align-items:center;margin-bottom:12px;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#5AC8FA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></div>
+            <p style="font-size:0.78rem;font-weight:700;color:var(--text-1);margin-bottom:4px;">Finds the cause</p>
+            <div class="card-body">Checks live system data and recent software changes. Returns a confident answer in seconds.</div>
+          </div>
+          <div class="card" style="border-top:3px solid var(--green);">
+            <div class="card-title" style="color:var(--green);">Respond</div>
+            <div class="card-icon" style="display:flex;justify-content:center;align-items:center;margin-bottom:12px;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
+            <p style="font-size:0.78rem;font-weight:700;color:var(--text-1);margin-bottom:4px;">Prepares the fix</p>
+            <div class="card-body">Writes the technical fix and the customer message at the same time — then waits for a human to say go.</div>
+          </div>
+        </div>
+        <div class="card" style="text-align:center;background:var(--blue-dim);border-color:var(--blue-glow);">
+          <p style="font-size:0.9rem;font-weight:500;color:var(--text-1);">The system does all the thinking. <span style="color:var(--blue);font-weight:700;">A human makes the final call.</span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 4 — ARCHITECTURE ═══════════ -->
+    <section class="slide" id="s4">
+      <div class="slide-bg">
+        <div class="orb" style="width:400px;height:400px;background:var(--blue);top:50%;left:50%;transform:translate(-50%,-50%);opacity:0.08;"></div>
+      </div>
+      <div class="slide-inner">
+        <span class="eyebrow">04 — Architecture</span>
+        <div class="s4-grid" style="display:grid; grid-template-columns: 1fr 1.6fr; gap:40px; align-items:center; width:100%; text-align:left;">
+          
+          <div class="s4-left">
+            <h2 class="slide-title" style="text-align:left; margin-bottom:20px;">One Supervisor.<br/>Four Specialists.</h2>
+            <p style="font-size:0.9rem;color:var(--text-3);line-height:1.6;">Chosen over a peer-to-peer design for predictable results and a full audit trail.</p>
+          </div>
+
+          <div class="s4-right" style="display:flex;flex-direction:column;gap:12px;width:100%;text-align:center;">
+            <div class="arch-box supervisor" style="width:100%;">
+              Supervisor Agent
+              <sub>Runs and coordinates everything</sub>
+            </div>
+            
+            <div class="arch-arrows" style="justify-content:center; gap:30px;">
+              <span style="color:var(--blue);">▼ routes tasks</span>
+              <span style="color:var(--blue);">findings returned ▲</span>
+            </div>
+            
+            <div class="grid-2" style="gap:12px;">
+              <div class="arch-box">Customer Signal Agent<sub>Complaint detection</sub></div>
+              <div class="arch-box">Observability Agent<sub>Live system health</sub></div>
+              <div class="arch-box">Change Correlation Agent<sub>Deploy matching</sub></div>
+              <div class="arch-box">Recovery &amp; Comms Agent<sub>Fix &amp; messaging</sub></div>
+            </div>
+            
+            <div class="arch-arrows" style="justify-content:center;">↓</div>
+            
+            <div class="arch-box gate" style="width:100%;">
+              <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top:-2px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Human Approval Gate
+              </div>
+              <sub style="color:rgba(48,209,88,0.6);display:block;margin-top:4px;">No action happens without an engineer pressing Authorize</sub>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 5 — THE FIVE AGENTS ═══════════ -->
+    <section class="slide" id="s5">
+      <div class="slide-inner compact">
+        <span class="eyebrow">05 — The Five Agents</span>
+        <h2 class="slide-title">Five Specialists. One Mission.</h2>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table class="glass-table">
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Where it Looks</th>
+                <th>What it Does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Customer Signal Agent</td>
+                <td>IVR calls, chat, social media</td>
+                <td>Detects complaint patterns and flags when a surge is happening</td>
+              </tr>
+              <tr>
+                <td>Observability Agent</td>
+                <td>Datadog, Dynatrace</td>
+                <td>Checks live system health — latency, errors, failed calls</td>
+              </tr>
+              <tr>
+                <td>Change Correlation Agent</td>
+                <td>ServiceNow, CI/CD logs</td>
+                <td>Checks if a recent software update caused the failure. Gives a 0–1 confidence score</td>
+              </tr>
+              <tr>
+                <td>Approved runbooks, notification templates</td>
+                <td>Prepares an approved runbook-based recovery recommendation and customer communication</td>
+              </tr>
+              <tr>
+                <td>Supervisor Agent</td>
+                <td>All agents</td>
+                <td>Runs the whole pipeline and stops at the Human Approval Gate</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 6 — INCIDENT WALKTHROUGH ═══════════ -->
+    <section class="slide" id="s6">
+      <div class="slide-bg">
+        <div class="orb" style="width:300px;height:300px;background:var(--green);bottom:-100px;right:-50px;opacity:0.1;"></div>
+      </div>
+      <div class="slide-inner compact">
+        <span class="eyebrow">06 — Incident Walkthrough</span>
+        <h2 class="slide-title">From Broken Patch to<br/>Restored Service in 15 Minutes</h2>
+        <div class="card">
+          <div class="timeline">
+            <div class="tl-item"><div class="tl-dot">1</div><div class="tl-time">09:42</div><div class="tl-label">Patch deployed</div></div>
+            <div class="tl-item"><div class="tl-dot">2</div><div class="tl-time">09:47</div><div class="tl-label">Latency spikes</div></div>
+            <div class="tl-item"><div class="tl-dot">3</div><div class="tl-time">09:51</div><div class="tl-label">Complaints detected</div></div>
+            <div class="tl-item"><div class="tl-dot">4</div><div class="tl-time">09:54</div><div class="tl-label">Root cause found</div></div>
+            <div class="tl-item"><div class="tl-dot">5</div><div class="tl-time">09:56</div><div class="tl-label">Approval gate active</div></div>
+            <div class="tl-item"><div class="tl-dot" style="border-color:var(--green);background:rgba(48,209,88,0.15);">✓</div><div class="tl-time" style="color:var(--green);">09:57</div><div class="tl-label" style="color:var(--green);">Recovery approved</div></div>
+          </div>
+        </div>
+        <div class="grid-2" style="gap:12px;">
+          <div class="card" style="padding:14px 18px;"><div class="card-body">Customer Signal Agent spotted a <strong style="color:var(--text-1);">37% surge</strong> in login complaints minutes after the patch went live.</div></div>
+          <div class="card" style="padding:14px 18px;"><div class="card-body">Observability Agent confirmed latency jumped from <strong style="color:var(--text-1);">180ms to 4,200ms</strong> across the mobile API.</div></div>
+          <div class="card" style="padding:14px 18px;"><div class="card-body">Change Correlation Agent tied the failure to <strong style="color:var(--text-1);">CHG-1048</strong> with <strong style="color:var(--blue);">0.98 confidence</strong>.</div></div>
+          <div class="card" style="padding:14px 18px;"><div class="card-body">Recovery Agent drafted the rollback; the SRE pressed <strong style="color:var(--green);">Authorize</strong> and a safe recovery plan was approved in the demo flow.</div></div>
+        </div>
+        <div class="stat-banner">
+          <span style="font-size:0.8rem;color:var(--text-2);">Industry average</span>
+          <span class="stat-num count-up" data-val="142" data-suffix=" min" style="font-size:1.8rem;color:#FF453A;">142 min</span>
+          <span class="vs">vs</span>
+          <span class="stat-num count-up" data-prefix="DERA " data-val="15" data-suffix=" min" style="font-size:1.8rem;">DERA 15 min</span>
+          <span style="background:rgba(48,209,88,0.15);border:1px solid rgba(48,209,88,0.3);border-radius:999px;padding:3px 10px;font-size:0.72rem;font-weight:700;color:var(--green);">89% faster</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 7 — TOOLS & FEASIBILITY ═══════════ -->
+    <section class="slide" id="s7">
+      <div class="slide-inner">
+        <span class="eyebrow">07 — Tools &amp; Feasibility</span>
+        <h2 class="slide-title">Designed to integrate with systems banks already use</h2>
+        <div class="grid-2" style="align-items:start;gap:20px;">
+          <div class="card">
+            <div class="card-title" style="margin-bottom:14px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:8px;margin-top:-2px;color:#fff;"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> What the Agent Decides</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--blue);font-size:1.1rem;">→</span><span class="card-body">Is this complaint real or normal noise?</span></div>
+              <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--blue);font-size:1.1rem;">→</span><span class="card-body">Which tool should I use next?</span></div>
+              <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--blue);font-size:1.1rem;">→</span><span class="card-body">How confident am I?</span></div>
+              <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--blue);font-size:1.1rem;">→</span><span class="card-body">What tone should the customer message have?</span></div>
+              <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--blue);font-size:1.1rem;">→</span><span class="card-body">Is this too uncertain — should I ask a human?</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title" style="margin-bottom:14px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:8px;margin-top:-2px;color:var(--text-1);"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg> What the Tools Execute</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div class="card" style="border:none;background:rgba(255,255,255,0.03);padding:10px 14px;">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--text-1);">Datadog &amp; Dynatrace metrics</span>
+                <span style="font-size:0.78rem;color:var(--text-2);display:block;">Simulated in MVP</span>
+              </div>
+              <div class="card" style="border:none;background:rgba(255,255,255,0.03);padding:10px 14px;">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--text-1);">ServiceNow, CI/CD &amp; GitHub</span>
+                <span style="font-size:0.78rem;color:var(--text-2);display:block;">Simulated in MVP</span>
+              </div>
+              <div class="card" style="border:none;background:rgba(255,255,255,0.03);padding:10px 14px;">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--text-1);">IVR, Chatbot &amp; Support logs</span>
+                <span style="font-size:0.78rem;color:var(--text-2);display:block;">Simulated in MVP</span>
+              </div>
+              <div class="card" style="border:none;background:rgba(255,255,255,0.03);padding:10px 14px;">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--text-1);">Approved Runbooks</span>
+                <span style="font-size:0.78rem;color:var(--text-2);display:block;">Simulated in MVP</span>
+              </div>
+              <div class="card" style="border:none;background:rgba(255,255,255,0.03);padding:10px 14px;">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--text-1);">Firebase &amp; Genesys</span>
+                <span style="font-size:0.78rem;color:var(--text-2);display:block;">Future integration: Notifications &amp; Call center</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="text-align:center;background:var(--blue-dim);border-color:var(--blue-glow);">
+          <p style="font-size:0.9rem;color:var(--text-1);">Designed to integrate with enterprise tools. <span style="color:var(--blue);font-weight:600;">MVP uses simulated/synthetic connectors.</span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 8 — MVP IMPLEMENTATION ═══════════ -->
+    <section class="slide" id="s8">
+      <div class="slide-inner">
+        <span class="eyebrow">08 — MVP Implementation</span>
+        <h2 class="slide-title">Under the Hood</h2>
+        <div class="grid-2" style="align-items:start;gap:30px;text-align:left;">
+          <!-- Left Col: MVP Implementation -->
+          <div class="card" style="padding:30px;">
+            <h3 style="font-size:1.3rem;font-weight:700;color:var(--blue);margin-bottom:16px;">MVP Implementation</h3>
+            <ul style="color:var(--text-2);font-size:0.85rem;line-height:1.6;padding-left:20px;display:flex;flex-direction:column;gap:12px;">
+              <li><strong style="color:var(--text-1);">FastAPI backend</strong> managing incidents, sessions, evidence and recovery outcomes</li>
+              <li><strong style="color:var(--text-1);">Hermes runtime integration</strong> for live agentic reasoning and orchestration</li>
+              <li><strong style="color:var(--text-1);">Interactive recovery cockpit</strong> with timeline, evidence, agents, dossier and approval gate</li>
+              <li><strong style="color:var(--text-1);">Synthetic demo data</strong> to avoid real customer/banking system access</li>
+              <li><strong style="color:var(--text-1);">Human-in-the-loop approval</strong> for high-risk recovery actions</li>
+            </ul>
+          </div>
+
+          <!-- Right Col: Hermes Runtime -->
+          <div class="card" style="padding:30px;">
+            <h3 style="font-size:1.3rem;font-weight:700;color:#5AC8FA;margin-bottom:16px;">Hermes as the Agentic Runtime</h3>
+            <p style="font-size:0.85rem;color:var(--text-2);margin-bottom:16px;">Hermes is not used as a simple chatbot. It acts as the reasoning layer behind the cockpit:</p>
+            <ul style="color:var(--text-2);font-size:0.85rem;line-height:1.6;padding-left:20px;display:flex;flex-direction:column;gap:12px;">
+              <li>Supervisor orchestration</li>
+              <li>Specialist agent delegation</li>
+              <li>Evidence-grounded reasoning</li>
+              <li>Recovery recommendation generation</li>
+              <li>Approval-aware decision flow</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 9 — RISK & COMPLIANCE ═══════════ -->
+    <section class="slide" id="s9">
+      <div class="slide-inner">
+        <span class="eyebrow">09 — Risk &amp; Compliance</span>
+        <h2 class="slide-title">Safe by Design</h2>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div class="risk-card">
+            <div class="risk-scenario">The AI gives a wrong answer</div>
+            <div class="risk-response">Every finding must include a real ID, error code, or timestamp. If unsure, it sends the question to a human. <strong style="color:var(--text-1);">It never guesses.</strong></div>
+          </div>
+          <div class="risk-card">
+            <div class="risk-scenario">The AI acts without permission</div>
+            <div class="risk-response">The system always stops before taking action. The rollback command is written but never runs without a human pressing <strong style="color:var(--green);">Authorize</strong>. In the MVP and target governance design, high-risk actions require explicit human approval.</div>
+          </div>
+          <div class="risk-card">
+            <div class="risk-scenario">Customer data is exposed</div>
+            <div class="risk-response">Before any transcript reaches an agent, an automatic filter removes all names, account numbers, and card details.</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <span style="font-size:0.78rem;font-weight:600;color:var(--text-2);">COMPLIANCE SUPPORT: EVIDENCE READINESS FOR</span>
+          <div class="compliance-row">
+            <span class="compliance-pill">GDPR</span>
+            <span class="compliance-pill">PCI-DSS</span>
+            <span class="compliance-pill">SOX</span>
+            <span class="compliance-pill">Basel III</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 10 — RESULTS ═══════════ -->
+    <section class="slide" id="s10">
+      <div class="slide-bg">
+        <div class="orb" style="width:600px;height:600px;background:var(--blue);top:50%;left:50%;transform:translate(-50%,-50%);opacity:0.08;"></div>
+      </div>
+      <div class="slide-inner">
+        <span class="eyebrow">10 — Results</span>
+        <h2 class="slide-title">Expected Business Impact</h2>
+        <div class="grid-6">
+          <div class="card" style="text-align:center;">
+            <div class="stat-num count-up" data-prefix="142→" data-val="15" data-suffix="">142→15</div>
+            <div style="font-size:0.68rem;font-weight:700;color:var(--blue);letter-spacing:0.06em;text-transform:uppercase;margin:4px 0;">Minutes</div>
+            <div class="stat-label">Diagnosis time target</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div class="stat-num count-up" data-prefix="" data-val="45" data-suffix="%">45%</div>
+            <div style="font-size:0.68rem;font-weight:700;color:var(--blue);letter-spacing:0.06em;text-transform:uppercase;margin:4px 0;">Reduction</div>
+            <div class="stat-label">Call deflection target</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div class="stat-num count-up" data-prefix="$" data-val="2.3" data-suffix="M" data-decimals="1">$2.3M</div>
+            <div style="font-size:0.68rem;font-weight:700;color:var(--blue);letter-spacing:0.06em;text-transform:uppercase;margin:4px 0;">Per Incident</div>
+            <div class="stat-label">Estimated losses protected in severe incidents</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div class="stat-num count-up" data-prefix="" data-val="1.8" data-suffix="M" data-decimals="1">1.8M</div>
+            <div style="font-size:0.68rem;font-weight:700;color:var(--blue);letter-spacing:0.06em;text-transform:uppercase;margin:4px 0;">Users</div>
+            <div class="stat-label">Protected during a critical incident</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div class="stat-num count-up" data-prefix="" data-val="0.98" data-suffix="" data-decimals="2">0.98</div>
+            <div style="font-size:0.68rem;font-weight:700;color:var(--blue);letter-spacing:0.06em;text-transform:uppercase;margin:4px 0;">Confidence</div>
+            <div class="stat-label">AI confidence score on root cause</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div class="stat-num count-up" data-prefix="" data-val="4" data-suffix="">4</div>
+            <div style="font-size:0.68rem;font-weight:700;color:var(--blue);letter-spacing:0.06em;text-transform:uppercase;margin:4px 0;">Frameworks</div>
+            <div class="stat-label">Compliance evidence generated automatically</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 11 — WHAT COMES NEXT ═══════════ -->
+    <section class="slide" id="s11">
+      <div class="slide-bg">
+        <div class="orb" style="width:500px;height:500px;background:var(--purple);bottom:-200px;left:-100px;opacity:0.1;"></div>
+      </div>
+      <div class="slide-inner">
+        <span class="eyebrow">11 — What Comes Next</span>
+        <h2 class="slide-title">Four Phases. One Direction.</h2>
+        <div class="grid-4">
+          <div class="card">
+            <div class="phase-num">01</div>
+            <div class="phase-label">Now</div>
+            <div class="phase-title">React &amp; Recover</div>
+            <div class="phase-body">Detect, diagnose, and respond to live incidents across mobile and web banking.</div>
+          </div>
+          <div class="card">
+            <div class="phase-num">02</div>
+            <div class="phase-label">Next</div>
+            <div class="phase-title">Continuous Learning</div>
+            <div class="phase-body">The system gets smarter every time an engineer adjusts one of its recommendations.</div>
+          </div>
+          <div class="card">
+            <div class="phase-num">03</div>
+            <div class="phase-label">Future</div>
+            <div class="phase-title">Predict Before it Happens</div>
+            <div class="phase-body">Spot patterns that predict an outage up to 10 minutes before customers notice.</div>
+          </div>
+          <div class="card">
+            <div class="phase-num">04</div>
+            <div class="phase-label">Vision</div>
+            <div class="phase-title">Full Bank Coverage</div>
+            <div class="phase-body">Expand to ATM networks, branch systems, and third-party banking partners.</div>
+          </div>
+        </div>
+        <div class="quote">"From reactive chaos to proactive recovery — in 15 minutes."</div>
+        <p class="team-line">Rayane Mazari · Jaume Balaguer · Joyce Eskafi · Magdalena Tasevska · Riyad Mazari</p>
+      </div>
+    </section>
+
+    <!-- ═══════════ SLIDE 12 — THANK YOU ═══════════ -->
+    <section class="slide" id="s12">
+      <div class="slide-bg">
+        <div class="orb" style="width:600px;height:600px;background:var(--blue);top:-200px;left:-200px;opacity:0.18;"></div>
+        <div class="orb" style="width:400px;height:400px;background:#001A99;bottom:-100px;right:-100px;opacity:0.25;"></div>
+        <div class="particles-container">
+          <div class="particle" style="left:5%; width:3px; height:3px; animation-duration:15s; animation-delay:0s;"></div>
+          <div class="particle" style="left:12%; width:2px; height:2px; animation-duration:12s; animation-delay:4s;"></div>
+          <div class="particle" style="left:18%; width:4px; height:4px; animation-duration:18s; animation-delay:1s;"></div>
+          <div class="particle" style="left:24%; width:3px; height:3px; animation-duration:14s; animation-delay:7s;"></div>
+          <div class="particle" style="left:31%; width:5px; height:5px; animation-duration:22s; animation-delay:2s;"></div>
+          <div class="particle" style="left:38%; width:2px; height:2px; animation-duration:16s; animation-delay:5s;"></div>
+          <div class="particle" style="left:44%; width:3px; height:3px; animation-duration:19s; animation-delay:8s;"></div>
+          <div class="particle" style="left:51%; width:4px; height:4px; animation-duration:13s; animation-delay:3s;"></div>
+          <div class="particle" style="left:58%; width:2px; height:2px; animation-duration:17s; animation-delay:6s;"></div>
+          <div class="particle" style="left:65%; width:3px; height:3px; animation-duration:21s; animation-delay:9s;"></div>
+          <div class="particle" style="left:72%; width:5px; height:5px; animation-duration:15s; animation-delay:4s;"></div>
+          <div class="particle" style="left:79%; width:2px; height:2px; animation-duration:18s; animation-delay:2s;"></div>
+          <div class="particle" style="left:86%; width:4px; height:4px; animation-duration:14s; animation-delay:7s;"></div>
+          <div class="particle" style="left:92%; width:3px; height:3px; animation-duration:20s; animation-delay:1s;"></div>
+          <div class="particle" style="left:98%; width:2px; height:2px; animation-duration:12s; animation-delay:5s;"></div>
+          <div class="particle" style="left:8%; width:4px; height:4px; animation-duration:16s; animation-delay:10s;"></div>
+          <div class="particle" style="left:16%; width:3px; height:3px; animation-duration:19s; animation-delay:3s;"></div>
+          <div class="particle" style="left:27%; width:2px; height:2px; animation-duration:14s; animation-delay:8s;"></div>
+          <div class="particle" style="left:35%; width:5px; height:5px; animation-duration:23s; animation-delay:6s;"></div>
+          <div class="particle" style="left:48%; width:3px; height:3px; animation-duration:17s; animation-delay:11s;"></div>
+          <div class="particle" style="left:55%; width:2px; height:2px; animation-duration:13s; animation-delay:2s;"></div>
+          <div class="particle" style="left:62%; width:4px; height:4px; animation-duration:21s; animation-delay:9s;"></div>
+          <div class="particle" style="left:70%; width:3px; height:3px; animation-duration:18s; animation-delay:5s;"></div>
+          <div class="particle" style="left:77%; width:5px; height:5px; animation-duration:15s; animation-delay:1s;"></div>
+          <div class="particle" style="left:83%; width:2px; height:2px; animation-duration:16s; animation-delay:7s;"></div>
+          <div class="particle" style="left:89%; width:3px; height:3px; animation-duration:20s; animation-delay:4s;"></div>
+          <div class="particle" style="left:95%; width:4px; height:4px; animation-duration:14s; animation-delay:12s;"></div>
+          <div class="particle" style="left:3%; width:2px; height:2px; animation-duration:17s; animation-delay:9s;"></div>
+          <div class="particle" style="left:21%; width:3px; height:3px; animation-duration:19s; animation-delay:13s;"></div>
+          <div class="particle" style="left:41%; width:4px; height:4px; animation-duration:15s; animation-delay:5s;"></div>
+          <div class="particle" style="left:68%; width:2px; height:2px; animation-duration:18s; animation-delay:11s;"></div>
+          <div class="particle" style="left:88%; width:3px; height:3px; animation-duration:13s; animation-delay:8s;"></div>
+        </div>
+      </div>
+      <div class="slide-inner">
+        <p class="eyebrow" style="justify-content:center;">12 — Thank You</p>
+        <h2 class="ty-title">Thank You</h2>
+        <p style="font-size:1.1rem;color:var(--text-2);text-align:center;">We are happy to answer any questions.</p>
+        <hr class="glass-hr" style="max-width:300px;margin:8px auto;"/>
+        <p style="font-size:0.78rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3);text-align:center;">Team</p>
+        <p class="team-line" style="text-align:center;font-size:0.85rem;color:var(--text-2);">Rayane Mazari · Jaume Balaguer · Joyce Eskafi<br/>Magdalena Tasevska · Riyad Mazari</p>
+        <div style="margin-top:16px;">
+          <span class="badge">DERA · Digital Experience Recovery Agent</span>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /deck -->
+
+  <!-- NAV -->
+  <nav id="nav">
+    <button id="btn-prev" title="Previous (←)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="dots" id="dots"></div>
+    <span id="counter">01 / 12</span>
+    <button id="btn-next" title="Next (→)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </nav>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const dotsEl = document.getElementById('dots');
+    const counter = document.getElementById('counter');
+    const N = slides.length;
+    let current = 0;
+    let animating = false;
+
+    // Build dots
+    slides.forEach((_, i) => {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i === 0 ? ' active' : '');
+      d.addEventListener('click', () => goTo(i));
+      dotsEl.appendChild(d);
+    });
+
+    function goTo(idx) {
+      const next = ((idx % N) + N) % N;
+      if (next === current || animating) return;
+      animating = true;
+
+      const dir = next > current ? 1 : -1;
+      const outSlide = slides[current];
+      const inSlide  = slides[next];
+
+      // 1. Position incoming slide off-screen WITHOUT transition
+      inSlide.style.transition = 'none';
+      inSlide.style.transform  = dir > 0 ? 'translateX(60px)' : 'translateX(-60px)';
+      inSlide.style.opacity    = '0';
+      inSlide.classList.remove('active');
+
+      // 2. Force reflow so browser registers the starting position
+      inSlide.getBoundingClientRect();
+
+      // 3. Animate out the current slide
+      outSlide.style.transform = dir > 0 ? 'translateX(-60px)' : 'translateX(60px)';
+      outSlide.style.opacity   = '0';
+      outSlide.classList.remove('active');
+
+      // 4. Animate incoming slide to center
+      inSlide.style.transition = '';  // restore CSS transition
+      inSlide.style.transform  = 'translateX(0)';
+      inSlide.style.opacity    = '1';
+      inSlide.classList.add('active');
+
+      current = next;
+
+      // 5. Clean up after animation
+      const DUR = 520;
+      setTimeout(() => {
+        outSlide.style.transform = '';
+        outSlide.style.opacity   = '';
+        outSlide.style.transition = '';
+        animating = false;
+
+        if (inSlide.querySelectorAll('.count-up').length > 0) {
+          inSlide.querySelectorAll('.count-up').forEach(el => {
+            const target = parseFloat(el.getAttribute('data-val'));
+            const prefix = el.getAttribute('data-prefix') || '';
+            const suffix = el.getAttribute('data-suffix') || '';
+            const dec = parseInt(el.getAttribute('data-decimals')) || 0;
+            const duration = 1500;
+            const start = performance.now();
+            
+            function update(t) {
+              const p = Math.min((t - start) / duration, 1);
+              const easeOut = 1 - Math.pow(1 - p, 3);
+              const curr = (target * easeOut).toFixed(dec);
+              el.textContent = prefix + curr + suffix;
+              if (p < 1) requestAnimationFrame(update);
+            }
+            requestAnimationFrame(update);
+          });
+        }
+      }, DUR);
+
+      // Update dots
+      document.querySelectorAll('.dot').forEach((d, i) =>
+        d.classList.toggle('active', i === current));
+
+      // Update counter
+      counter.textContent = String(current + 1).padStart(2, '0') + ' / ' + String(N).padStart(2, '0');
+    }
+
+    document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1));
+    document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1));
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+      if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); goTo(current - 1); }
+    });
+
+    // Touch / swipe
+    let touchX = 0;
+    document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+    document.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - touchX;
+      if (Math.abs(dx) > 50) dx < 0 ? goTo(current + 1) : goTo(current - 1);
+    });
+  </script>
+
+  <!-- 3D SPHERON RENDERER FOR SLIDE 1 -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const canvas = document.getElementById('spheronCanvas');
+    if (canvas) {
+      const SIZE = 440; // internal resolution (2x display size for crisp HiDPI)
+
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(SIZE, SIZE);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.8;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
+      camera.position.set(0, 0, 3.6);
+
+      // Lighting: same as SCENE 1 (OVERLAY) from the interface
+      scene.add(new THREE.AmbientLight(0xffffff, 0.02));
+
+      // Right side: Sharp white rim light (slightly behind)
+      const overlayKey = new THREE.DirectionalLight(0xffffff, 6.0);
+      overlayKey.position.set(4, 1, -2);
+      scene.add(overlayKey);
+
+      // Left side: Intense electric blue
+      const overlayFill = new THREE.DirectionalLight(0x0A84FF, 7.0);
+      overlayFill.position.set(-4, -1, 1);
+      scene.add(overlayFill);
+
+      // Top/Front-Left: Subtle cyan to catch top edges
+      const overlayTop = new THREE.DirectionalLight(0x5AC8FA, 2.0);
+      overlayTop.position.set(-1, 5, 2);
+      scene.add(overlayTop);
+
+      let model = null;
+      let mixer = null;
+      const clock = new THREE.Clock();
+
+      new GLTFLoader().load('./spheron.glb', (gltf) => {
+        model = gltf.scene;
+
+        model.traverse((node) => {
+          if (node.isMesh) {
+            const mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach((mat) => {
+              mat.color?.setHex(0x555555);
+              mat.roughness  = 0.5;
+              mat.metalness  = 0.2;
+              mat.emissive?.setHex(0x000000);
+              mat.needsUpdate = true;
+            });
+          }
+        });
+
+        const box    = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const size   = box.getSize(new THREE.Vector3());
+        const s      = 1.8 / Math.max(size.x, size.y, size.z);
+        model.scale.setScalar(s);
+        model.position.sub(center.multiplyScalar(s));
+        scene.add(model);
+
+        if (gltf.animations?.length) {
+          mixer = new THREE.AnimationMixer(model);
+          gltf.animations.forEach(clip => mixer.clipAction(clip).play());
+        }
+      });
+
+      (function animate() {
+        requestAnimationFrame(animate);
+        const dt = clock.getDelta();
+        if (model)  model.rotation.y += 0.003;
+        if (mixer)  mixer.update(dt);
+        renderer.render(scene, camera);
+      })();
+    }
+  </script>
+
+</body>
+</html>
