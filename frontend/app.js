@@ -19,9 +19,16 @@ const state = {
   voiceSpeaking: false,
   voiceStreamBuffer: '',
   voiceAudioQueue: Promise.resolve(),
+  voiceAudioToken: 0,
+  voiceAbortController: null,
+  currentAudio: null,
+  currentAudioStop: null,
   audioContext: null,
   audioUnlocked: false,
   kokoroAvailable: null,
+  activeResponseController: null,
+  activeResponseItem: null,
+  activeResponseToken: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -264,6 +271,34 @@ function updateHermesProgress(item, message) {
   if (target) target.textContent = message;
 }
 
+function isAbortError(error) {
+  return error?.name === 'AbortError';
+}
+
+function markResponseStopped(item) {
+  if (!item || item.dataset.stopped === 'true') return;
+  item.dataset.stopped = 'true';
+  item.classList.remove('typing');
+  const body = item.querySelector('.message-body');
+  const progress = item.querySelector('[data-progress-text]');
+  const hasPartialAnswer = item.dataset.firstDelta === 'true' && body?.textContent.trim();
+  if (progress || !hasPartialAnswer) {
+    if (body) body.innerHTML = '<p class="microcopy">Conversation stopped.</p>';
+    return;
+  }
+  body.insertAdjacentHTML('beforeend', '<p class="microcopy">Conversation stopped.</p>');
+}
+
+function stopActiveWriting() {
+  state.activeResponseToken += 1;
+  state.streamPhase = 'stopped';
+  if (state.activeResponseController) {
+    state.activeResponseController.abort();
+    state.activeResponseController = null;
+  }
+  if (state.activeResponseItem) markResponseStopped(state.activeResponseItem);
+}
+
 function ensureStreamTarget(item, adapterMode = 'hermes-api') {
   if (item.dataset.firstDelta !== 'true') {
     item.dataset.firstDelta = 'true';
@@ -273,7 +308,8 @@ function ensureStreamTarget(item, adapterMode = 'hermes-api') {
   return item.querySelector('.message-body p');
 }
 
-async function typeHermesMessage(item, content, adapterMode = '') {
+async function typeHermesMessage(item, content, adapterMode = '', options = {}) {
+  const { signal, token } = options;
   item.className = 'chat-message hermes';
   item.dataset.firstDelta = 'true';
   item.innerHTML = `<strong>DERA <em>${adapterLabel(adapterMode)}</em></strong><div class="message-body"><p></p></div>`;
@@ -281,13 +317,22 @@ async function typeHermesMessage(item, content, adapterMode = '') {
   const text = String(content || '');
   const chunkSize = text.length > 900 ? 18 : 9;
   for (let index = 0; index < text.length; index += chunkSize) {
+    if (signal?.aborted || (token !== undefined && token !== state.activeResponseToken)) {
+      markResponseStopped(item);
+      return false;
+    }
     target.textContent = text.slice(0, index + chunkSize);
     if (state.voiceMode) handleVoiceDelta(text.slice(index, index + chunkSize));
     $('chatLog').scrollTop = $('chatLog').scrollHeight;
     await wait(14);
   }
+  if (signal?.aborted || (token !== undefined && token !== state.activeResponseToken)) {
+    markResponseStopped(item);
+    return false;
+  }
   flushVoiceBuffer();
   item.querySelector('.message-body').innerHTML = formatHermesContent(text);
+  return true;
 }
 
 function setVoiceBubble(title, detail, tone = 'idle') {
@@ -331,16 +376,56 @@ async function primeAudioPlayback() {
   }
 }
 
-function playAudioBlob(blob) {
+function playAudioBlob(blob, token = state.voiceAudioToken) {
   return new Promise((resolve, reject) => {
-    const audio = new Audio(URL.createObjectURL(blob));
-    const cleanup = () => URL.revokeObjectURL(audio.src);
-    audio.onended = () => { cleanup(); resolve(); };
-    audio.onerror = () => { cleanup(); reject(new Error('audio_playback_failed')); };
+    if (!state.voiceMode || token !== state.voiceAudioToken) {
+      resolve();
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    let settled = false;
+    const cleanup = () => {
+      if (state.currentAudio === audio) {
+        state.currentAudio = null;
+        state.currentAudioStop = null;
+      }
+      URL.revokeObjectURL(url);
+    };
+    const settle = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback(value);
+    };
+    state.currentAudio = audio;
+    state.currentAudioStop = () => {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      settle(resolve);
+    };
+    audio.onended = () => { settle(resolve); };
+    audio.onerror = () => { settle(reject, new Error('audio_playback_failed')); };
     audio.play().then(() => {
       state.audioUnlocked = true;
-    }).catch((error) => { cleanup(); reject(error); });
+    }).catch((error) => { settle(reject, error); });
   });
+}
+
+function stopVoiceOutput() {
+  state.voiceAudioToken += 1;
+  state.voiceStreamBuffer = '';
+  state.voiceAudioQueue = Promise.resolve();
+  if (state.voiceAbortController) {
+    state.voiceAbortController.abort();
+    state.voiceAbortController = null;
+  }
+  state.currentAudioStop?.();
+  state.currentAudio = null;
+  state.currentAudioStop = null;
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  state.voiceSpeaking = false;
 }
 
 function fallbackBrowserSpeech(chunk, { interrupt = false } = {}) {
@@ -354,28 +439,41 @@ function fallbackBrowserSpeech(chunk, { interrupt = false } = {}) {
   window.speechSynthesis.speak(utterance);
 }
 
-async function speakWithKokoro(chunk) {
-  const response = await fetch(`${apiBase}/api/voice/tts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: chunk }),
-  });
+async function speakWithKokoro(chunk, token) {
+  if (token !== state.voiceAudioToken || !state.voiceMode || state.voiceMuted) return;
+  const controller = new AbortController();
+  state.voiceAbortController = controller;
+  let response;
+  try {
+    response = await fetch(`${apiBase}/api/voice/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: chunk }),
+      signal: controller.signal,
+    });
+  } finally {
+    if (state.voiceAbortController === controller) state.voiceAbortController = null;
+  }
+  if (token !== state.voiceAudioToken || !state.voiceMode || state.voiceMuted) return;
   if (!response.ok) throw new Error(await response.text());
   state.kokoroAvailable = true;
-  await playAudioBlob(await response.blob());
+  const blob = await response.blob();
+  if (token !== state.voiceAudioToken || !state.voiceMode || state.voiceMuted) return;
+  await playAudioBlob(blob, token);
 }
 
 function speakLiveChunk(text, { interrupt = false } = {}) {
   const chunk = String(text || '').trim();
   if (!chunk || !state.voiceMode || state.voiceMuted) return;
   if (interrupt) {
-    state.voiceAudioQueue = Promise.resolve();
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    stopVoiceOutput();
   }
+  const token = state.voiceAudioToken;
   setVoiceBubble('DERA is talking', chunk, 'speaking');
   state.voiceAudioQueue = state.voiceAudioQueue
-    .then(() => speakWithKokoro(chunk))
-    .catch(() => {
+    .then(() => speakWithKokoro(chunk, token))
+    .catch((error) => {
+      if (isAbortError(error) || token !== state.voiceAudioToken || !state.voiceMode) return;
       state.kokoroAvailable = false;
       fallbackBrowserSpeech(chunk, { interrupt });
     });
@@ -422,10 +520,9 @@ async function startVoiceConversation() {
 
 function stopVoiceConversation() {
   state.voiceMode = false;
-  state.voiceStreamBuffer = '';
-  state.voiceAudioQueue = Promise.resolve();
+  stopVoiceOutput();
+  stopActiveWriting();
   try { state.recognition?.stop(); } catch (_) { /* ignore inactive recognizer */ }
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   updateVoiceControls();
   $('voiceStatus').textContent = 'Voice conversation stopped. Text input is active.';
   $('chatInput').focus();
@@ -445,7 +542,7 @@ function toggleMicMute() {
 
 function toggleVoiceMute() {
   state.voiceMuted = !state.voiceMuted;
-  if (state.voiceMuted && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (state.voiceMuted) stopVoiceOutput();
   updateVoiceControls();
   setVoiceBubble(state.voiceMuted ? 'DERA voice muted' : 'DERA voice unmuted', state.voiceMuted ? 'DERA will keep writing, but audio output is muted.' : 'DERA will speak upcoming streamed sentence chunks through Kokoro when available.', state.voiceMuted ? 'muted' : 'listening');
 }
@@ -471,12 +568,14 @@ function dashboardContextForChat() {
   };
 }
 
-async function streamHermesMessage(item, question) {
+async function streamHermesMessage(item, question, options = {}) {
+  const { signal, token } = options;
   updateHermesProgress(item, 'Opening live DERA stream...');
   const response = await fetch(`${apiBase}/api/incidents/${state.incident.id}/ask/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, voice_mode: state.voiceMode, dashboard_context: dashboardContextForChat() }),
+    signal,
   });
   if (!response.ok || !response.body) throw new Error(`${response.status} ${response.statusText}: ${await response.text()}`);
   const reader = response.body.getReader();
@@ -485,6 +584,7 @@ async function streamHermesMessage(item, question) {
   let adapterMode = 'hermes-api';
   let answer = '';
   const handleBlock = (block) => {
+    if (signal?.aborted || (token !== undefined && token !== state.activeResponseToken)) return;
     const lines = block.split('\n');
     const event = (lines.find((line) => line.startsWith('event:')) || 'event: message').slice(6).trim();
     const dataLine = lines.find((line) => line.startsWith('data:'));
@@ -514,12 +614,20 @@ async function streamHermesMessage(item, question) {
     }
   };
   while (true) {
+    if (signal?.aborted || (token !== undefined && token !== state.activeResponseToken)) {
+      markResponseStopped(item);
+      throw new DOMException('Conversation stopped.', 'AbortError');
+    }
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const blocks = buffer.split('\n\n');
     buffer = blocks.pop() || '';
     blocks.forEach(handleBlock);
+  }
+  if (signal?.aborted || (token !== undefined && token !== state.activeResponseToken)) {
+    markResponseStopped(item);
+    throw new DOMException('Conversation stopped.', 'AbortError');
   }
   if (buffer.trim()) handleBlock(buffer);
   if (answer.trim()) item.querySelector('.message-body').innerHTML = formatHermesContent(answer);
@@ -1071,32 +1179,67 @@ async function askHermes(question) {
   $('chatInput').value = '';
   if (await routeDashboardCommand(cleanQuestion)) return;
   applyQuestionPlacement(cleanQuestion);
+  stopActiveWriting();
   const pending = addHermesWritingMessage('Opening incident and dashboard context...');
+  const responseController = new AbortController();
+  const responseToken = state.activeResponseToken + 1;
+  state.activeResponseToken = responseToken;
+  state.activeResponseController = responseController;
+  state.activeResponseItem = pending;
   try {
-    await streamHermesMessage(pending, cleanQuestion);
+    await streamHermesMessage(pending, cleanQuestion, { signal: responseController.signal, token: responseToken });
   } catch (streamError) {
+    if (isAbortError(streamError) || responseController.signal.aborted || responseToken !== state.activeResponseToken) {
+      markResponseStopped(pending);
+      return;
+    }
     state.streamPhase = 'stream_error';
     updateHermesProgress(pending, 'Streaming failed. Trying non-streaming DERA response...');
     try {
-      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', body: JSON.stringify({ question: cleanQuestion, voice_mode: state.voiceMode, dashboard_context: dashboardContextForChat() }) });
-      await typeHermesMessage(pending, result.answer, result.adapter_mode);
+      const result = await api(`/api/incidents/${state.incident.id}/ask`, { method: 'POST', signal: responseController.signal, body: JSON.stringify({ question: cleanQuestion, voice_mode: state.voiceMode, dashboard_context: dashboardContextForChat() }) });
+      await typeHermesMessage(pending, result.answer, result.adapter_mode, { signal: responseController.signal, token: responseToken });
     } catch (error) {
-      await typeHermesMessage(pending, `I could not answer from the backend: ${error.message || streamError.message}`, 'hermes-unavailable');
+      if (isAbortError(error) || responseController.signal.aborted || responseToken !== state.activeResponseToken) {
+        markResponseStopped(pending);
+        return;
+      }
+      await typeHermesMessage(pending, `I could not answer from the backend: ${error.message || streamError.message}`, 'hermes-unavailable', { signal: responseController.signal, token: responseToken });
+    }
+  } finally {
+    if (state.activeResponseToken === responseToken) {
+      state.activeResponseController = null;
+      state.activeResponseItem = null;
     }
   }
+}
+
+function dossierFieldLabel(field) {
+  return {
+    customer_communication: 'customer message',
+    executive_summary: 'executive summary',
+    recommended_recovery: 'technical action wording',
+    risks: 'risk explanation',
+  }[field] || field.replace(/_/g, ' ');
 }
 
 async function reviseDossier() {
   if (!state.incident) return;
   const field = $('revisionField').value;
   const instruction = $('revisionInstruction').value || 'Make this clearer and safer for operators.';
-  addChat('operator', `Revise ${field}: ${instruction}`);
+  const fieldLabel = dossierFieldLabel(field);
+  addChat('operator', `Revise ${fieldLabel}: ${instruction}`);
   const pending = addHermesWritingMessage('Sending dossier revision to DERA...');
   try {
-    await api(`/api/incidents/${state.incident.id}/dossier/revise`, { method: 'POST', body: JSON.stringify({ field, instruction }) });
+    const result = await api(`/api/incidents/${state.incident.id}/dossier/revise`, { method: 'POST', body: JSON.stringify({ field, instruction }) });
     state.incident = await api(`/api/incidents/${state.incident.id}/state`);
     renderIncident();
-    await typeHermesMessage(pending, `Revised ${field}. The dossier is ready for local approval review.`, state.hermesConnected ? 'hermes-api' : 'hermes-unavailable');
+    const revisedText = result.revised_text || state.incident.dossier?.[field] || '';
+    const adapterMode = result.adapter_mode || (state.hermesConnected ? 'hermes-api' : 'hermes-unavailable');
+    await typeHermesMessage(
+      pending,
+      `Revised ${fieldLabel}. The dashboard dossier now uses this text:\n\n${revisedText}\n\nApproval remains local and supervised.`,
+      adapterMode,
+    );
   } catch (error) {
     await typeHermesMessage(pending, `Dossier revision failed: ${error.message}`, 'hermes-unavailable');
   }

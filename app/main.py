@@ -513,8 +513,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         agent["status"] = "complete"
                         incident_event(incident, "hermes.subagent.live", {"agent": agent_id, "mode": result.get("mode", "hermes-api")})
                 except Exception as exc:
-                    agent["status"] = "blocked"
-                    agent["finding"] = "Live DERA specialist reasoning is unavailable; no invented specialist finding was substituted."
+                    if agent.get("status") == "complete":
+                        agent["tool"] = f"{agent['tool']} · live DERA unavailable"
+                        agent["finding"] = f"{agent['finding']} Live specialist reasoning was unavailable, so this step is using the local sample evidence."
+                    else:
+                        agent["status"] = "blocked"
+                        agent["finding"] = "Live DERA specialist reasoning is unavailable; no invented specialist finding was substituted."
                     incident_event(incident, "hermes.subagent.unavailable", {"agent": agent_id, "message": str(exc)})
         audit_event(db, action="investigate_incident", resource_type="incident", resource_id=incident_id, request=request, metadata={"state": incident["state"], "hermes_enabled": settings.hermes_enabled})
         return incident
@@ -606,12 +610,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="unknown_dossier_field")
         incident["state"] = "revising_dossier"
         original = incident["dossier"][field]
+        original_text = json.dumps(original) if isinstance(original, (list, dict)) else str(original)
         revised = original
         adapter_mode = "hermes-disabled"
         if settings.hermes_enabled:
             try:
                 result = await hermes.hermes_chat(
-                    prompt=f"Revise dossier field `{field}`. Operator instruction: {instruction}. Return only the revised field text.",
+                    prompt=(
+                        f"Revise only the `{field}` field in the recovery dossier.\n"
+                        "Use the current dashboard field text as the source of truth and keep all facts consistent with the full dossier context. "
+                        "Do not add new facts, external actions, or approval claims. Return only the revised field text.\n\n"
+                        f"Current `{field}` text:\n{original_text}\n\n"
+                        f"Operator instruction:\n{instruction}"
+                    ),
                     context=hermes_incident_context(incident),
                 )
                 revised = result.get("content") or original
@@ -627,7 +638,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         incident["dossier"]["status"] = "revised" if adapter_mode == "hermes-api" else "revision_needs_hermes"
         incident["state"] = "approval_required"
         incident_event(incident, "dossier.revised", {"field": field, "instruction": instruction, "adapter_mode": adapter_mode})
-        return {"dossier": incident["dossier"], "state": incident["state"], "adapter_mode": adapter_mode}
+        return {
+            "dossier": incident["dossier"],
+            "state": incident["state"],
+            "adapter_mode": adapter_mode,
+            "revised_field": field,
+            "original_text": original_text,
+            "revised_text": str(incident["dossier"][field]),
+        }
 
     @app.post("/api/incidents/{incident_id}/approval")
     async def approve_incident(incident_id: str, request: Request) -> dict[str, Any]:

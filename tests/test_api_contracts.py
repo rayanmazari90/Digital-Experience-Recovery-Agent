@@ -168,14 +168,46 @@ def test_incident_command_product_contract(client):
         json={"field": "customer_communication", "instruction": "Make the message calmer."},
     )
     assert revised.status_code == 200
-    assert revised.json()["state"] == "approval_required"
-    assert "Make the message calmer" in revised.json()["dossier"]["customer_communication"]
+    revised_body = revised.json()
+    assert revised_body["state"] == "approval_required"
+    assert revised_body["revised_field"] == "customer_communication"
+    assert revised_body["revised_text"] == revised_body["dossier"]["customer_communication"]
+    assert "Make the message calmer" in revised_body["dossier"]["customer_communication"]
 
     approved = client.post(f"/api/incidents/{incident['id']}/approval", json={"decision": "approved_local"})
     assert approved.status_code == 200
     assert approved.json()["state"] == "approved_local"
     assert approved.json()["approval"]["local_only"] is True
     assert approved.json()["approval"]["synthetic_recovery"] is True
+
+
+def test_live_specialist_unavailable_preserves_sample_evidence_completion(tmp_path):
+    settings = Settings(
+        database_path=tmp_path / "test.sqlite3",
+        storage_root=tmp_path / "storage",
+        hermes_enabled=True,
+        hermes_api_key="test-key",
+        hermes_base_url="http://127.0.0.1:9",
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        created = client.post("/api/incidents", json={})
+        assert created.status_code == 201
+        incident = created.json()
+
+        investigated = client.post(f"/api/incidents/{incident['id']}/investigate", json={})
+        assert investigated.status_code == 200
+        body = investigated.json()
+        customer_signal = next(agent for agent in body["subagents"] if agent["id"] == "customer_signal")
+
+        assert customer_signal["status"] == "complete"
+        assert "37% spike" in customer_signal["finding"]
+        assert "live DERA unavailable" in customer_signal["tool"]
+        assert any(
+            event["event_type"] == "hermes.subagent.unavailable"
+            and event["payload"]["agent"] == "customer_signal"
+            for event in body["events"]
+        )
 
 
 def test_evidence_outcomes_and_history_contract(client, session):
