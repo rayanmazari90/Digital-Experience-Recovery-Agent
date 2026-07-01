@@ -250,11 +250,32 @@
       <aside class="right-rail">
         <section class="glass-panel chat-panel">
 
-          <div class="panel-head chat-panel-head">
-            <div>
-              <span class="eyebrow">Hermes command</span>
-              <h2>Ask during investigation</h2>
+          <!-- Voice Pod — always visible, reflects voice state -->
+          <div class="voice-pod" id="voicePod" data-voice-state="idle">
+            <canvas id="spheronCanvas" class="spheron-canvas-chat"></canvas>
+            <div class="voice-pod-info">
+              <strong id="voiceBubbleTitle">Hermes</strong>
+              <p id="voiceBubbleText">Ask by voice or type below</p>
+              <!-- Controls appear when voice mode is active -->
+              <div class="voice-pod-controls">
+                <button id="micVoiceBtn" class="btn secondary compact" type="button" hidden>
+                  <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M3 3l14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="6" y="1" width="8" height="12" rx="4" stroke="currentColor" stroke-width="1.6"/><path d="M3 10a7 7 0 0012.6 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 17v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  Mic off
+                </button>
+                <button id="muteVoiceBtn" class="btn secondary compact" type="button" hidden>
+                  <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M2 10l4-3v6l4-5v8l4-4v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Mute
+                </button>
+                <button id="stopVoiceBtn" class="btn danger compact" type="button" hidden>
+                  <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor"/></svg>
+                  Stop
+                </button>
+              </div>
             </div>
+          </div>
+
+          <div class="panel-head chat-panel-head">
+            <span class="eyebrow">Hermes command</span>
             <button id="expandChatBtn" class="btn secondary compact" type="button" aria-pressed="false">Expand</button>
           </div>
 
@@ -279,38 +300,9 @@
     </div>
   </main>
 
-  <!-- ════════════════════════════════════ SIRI VOICE OVERLAY ════ -->
-  <div id="voiceBubble" class="voice-overlay" hidden aria-live="polite" data-voice-state="idle">
-
-    <div class="overlay-backdrop" aria-hidden="true"></div>
-
-    <!-- Spheron 3D model canvas -->
-    <div class="voice-orb-wrap" aria-hidden="true">
-      <canvas id="spheronCanvas" class="spheron-canvas"></canvas>
-    </div>
-
-    <!-- Status text -->
-    <div class="voice-status-text">
-      <strong id="voiceBubbleTitle">Voice mode ready</strong>
-      <p id="voiceBubbleText">Ask by voice. Hermes will speak while it writes.</p>
-    </div>
-
-    <!-- Controls inside overlay -->
-    <div class="voice-overlay-controls">
-      <button id="micVoiceBtn" class="voice-ctrl-btn" type="button" hidden>
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 3l14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="6" y="1" width="8" height="12" rx="4" stroke="currentColor" stroke-width="1.6"/><path d="M3 10a7 7 0 0012.6 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 17v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        Mic off
-      </button>
-      <button id="muteVoiceBtn" class="voice-ctrl-btn" type="button" hidden>
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M2 10l4-3v6l4-5v8l4-4v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Mute Hermes
-      </button>
-      <button id="stopVoiceBtn" class="voice-ctrl-btn voice-ctrl-stop" type="button" hidden>
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor"/></svg>
-        Stop
-      </button>
-    </div>
-
+  <!-- #voiceBubble: zero-size state tracker — app.js reads/writes this, MutationObserver syncs to #voicePod -->
+  <div id="voiceBubble" style="display:none!important" data-voice-state="idle" aria-live="polite">
+    <p id="voiceStatus"></p>
   </div>
 
   <!-- ════════════════════════════════════ ADVANCED RAW ════ -->

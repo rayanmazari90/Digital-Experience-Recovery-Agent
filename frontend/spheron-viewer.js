@@ -76,7 +76,7 @@ const logoCanvas    = document.getElementById('logoCanvas');
 const overlayCanvas = document.getElementById('spheronCanvas');
 
 const logoRenderer    = logoCanvas    ? makeRenderer(logoCanvas,    52)  : null;
-const overlayRenderer = overlayCanvas ? makeRenderer(overlayCanvas, 280) : null;
+const overlayRenderer = overlayCanvas ? makeRenderer(overlayCanvas, 110) : null;
 
 const logoCamera    = makeCamera();
 const overlayCamera = makeCamera();
@@ -158,3 +158,19 @@ const clock = new THREE.Clock();
   if (logoRenderer)    logoRenderer.render(logoScene, logoCamera);
   if (overlayRenderer) overlayRenderer.render(overlayScene, overlayCamera);
 })();
+
+/* ─────────────────────────────────────────────────────────────
+   SYNC voice state from hidden #voiceBubble → visible #voicePod
+   app.js sets data-voice-state on #voiceBubble;
+   we mirror it to #voicePod so CSS transitions work.
+───────────────────────────────────────────────────────────── */
+const voiceBubble = document.getElementById('voiceBubble');
+const voicePod    = document.getElementById('voicePod');
+
+if (voiceBubble && voicePod) {
+  new MutationObserver(() => {
+    const state = voiceBubble.dataset.voiceState || 'idle';
+    voicePod.dataset.voiceState = state;
+  }).observe(voiceBubble, { attributes: true, attributeFilter: ['data-voice-state'] });
+}
+
